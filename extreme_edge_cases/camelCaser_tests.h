@@ -17,3 +17,5 @@
  */
 int test_camelCaser(char **(*camelCaser)(const char *),
                     void (*destroy)(char **));
+
+int test_helper(char **(*camelCaser)(const char *), void (*destroy)(char **), const char * input, char** target);
