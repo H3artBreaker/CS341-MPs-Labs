@@ -19,7 +19,7 @@ int main() {
     print_camelCaser(input);
 
     // Put your expected output for the given input above.
-    char *correct[] = {"\xf", "Restofthestring", NULL};
+    char *correct[] = {"Restofthestring", NULL};
     // printf("The size of input is %ld, and the size of correct is %ld \n", sizeof(input), sizeof(correct));
     char *wrong[] = {"hello", "welcomeToCs241", NULL};
 

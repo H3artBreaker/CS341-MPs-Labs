@@ -69,62 +69,62 @@ int main() {
     printf("== two() ==\n");
     two();
 
-    // printf("== three() ==\n");
-    // const int num1 = 3;
-    // const int num2 = 3;
-    // three(&num1, &num2);
+    printf("== three() ==\n");
+    const int num1 = 3;
+    const int num2 = 3;
+    three(&num1, &num2);
 
-    // const int num3 = 4;
-    // three(&num1, &num3);
+    const int num3 = 4;
+    three(&num1, &num3);
 
-    // printf("== four() ==\n");
-    // float *p_four;
-    // int i4 = 4, i432 = 432;
+    printf("== four() ==\n");
+    float *p_four;
+    int i4 = 4, i432 = 432;
 
-    // p_four = four(&i4);
-    // free(p_four);
-    // p_four = four(&i432);
-    // free(p_four);
+    p_four = four(&i4);
+    free(p_four);
+    p_four = four(&i432);
+    free(p_four);
 
-    // printf("== five() ==\n");
-    // const char s = 'S';
-    // five(&s);
-    // const char t = '_';
-    // five(&t);
+    printf("== five() ==\n");
+    const char s = 'S';
+    five(&s);
+    const char t = '_';
+    five(&t);
 
-    // printf("== six() ==\n");
-    // six("World!");
+    printf("== six() ==\n");
+    six("World!");
 
-    // printf("== seven() ==\n");
-    // seven();
+    printf("== seven() ==\n");
+    seven();
 
-    // printf("== eight() ==\n");
-    // eight(10);
+    printf("== eight() ==\n");
+    eight(10);
 
-    // printf("== nine() ==\n");
-    // nine("red");
-    // nine("orange");
-    // nine("blue");
-    // nine("green");
+    printf("== nine() ==\n");
+    nine("red");
+    nine("orange");
+    nine("blue");
+    nine("green");
 
-    // printf("== ten() ==\n");
-    // ten(35);
-    // ten(20);
+    printf("== ten() ==\n");
+    ten(35);
+    ten(20);
 
-    // printf("== clear_bits() ==\n");
+    printf("== clear_bits() ==\n");
 
-    // clear_bits(0xFF, 0x55);
-    // clear_bits(0x00, 0xF0);
-    // clear_bits(0xAB, 0x00);
-    // clear_bits(0xCA, 0xFE);
-    // clear_bits(0x14, 0x00);
-    // clear_bits(0xBB, 0xBB);
+    clear_bits(0xFF, 0x55);
+    clear_bits(0x00, 0xF0);
+    clear_bits(0xAB, 0x00);
+    clear_bits(0xCA, 0xFE);
+    clear_bits(0x14, 0x00);
+    clear_bits(0xBB, 0xBB);
 
-    // printf("== little finite automata ==\n");
-    // little_automaton(transition_function_blue, "blue");
-    // little_automaton(transition_function_blue, "orange");
-    // little_automaton(transition_function_orange, "blue");
-    // little_automaton(transition_function_orange, "orange");
+    printf("== little finite automata ==\n");
+    little_automaton(transition_function_blue, "blue");
+    little_automaton(transition_function_blue, "orange");
+    little_automaton(transition_function_orange, "blue");
+    little_automaton(transition_function_orange, "orange");
 
     return 0;
 }
