@@ -9,14 +9,18 @@
 int main() {
     // Enter the string you want to test with the reference here.
     // char *input = " DDsa. 9S 6st.";
-    char *input = " DDsa. 9S 6st . 7sTd.";
+    //char *input = " DDsa. 9S 6st . 7sTd.";
     //char *input = " DDsa. 9S 6st. 3Rings. 3r4ings 7sTd.";
+    //char *input = "\5 test.";
+    char* input = "\x0f\x0f restofthestring.";
+    //char *input = "3 rings.";
 
     // This function prints the reference implementation output on the terminal.
     print_camelCaser(input);
 
     // Put your expected output for the given input above.
-    char *correct[] = {"ddsa","9s6St","3rings","3r4ings7Std",NULL};
+    char *correct[] = {"\xf", "Restofthestring", NULL};
+    // printf("The size of input is %ld, and the size of correct is %ld \n", sizeof(input), sizeof(correct));
     char *wrong[] = {"hello", "welcomeToCs241", NULL};
 
     // Compares the expected output you supplied with the reference output.

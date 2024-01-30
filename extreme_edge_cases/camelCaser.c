@@ -54,37 +54,38 @@ char **camel_caser(const char *input_str) {
             }
             sentence[length] = '\0';
             int idx = 0;
-            bool first_alpha = true;
-            //bool had_alpha = false;
+            bool no_alpha = true;
             bool first_word = true;
+            bool had_value_in = false;
             while(ptr != input_str) {
                 if (!ispunct(*ptr) && !isspace(*ptr) && !isalpha(*ptr)) {
+                    had_value_in = true;
                     sentence[idx] = *ptr;
                     idx++;
-                    //continue;
                 }
                 
                 if (isspace(*ptr)) {
-                    if (first_alpha == false) {
+                    if (had_value_in == true) {
                         first_word = false;
                     }
-                    first_alpha = true;
+                    // if (no_alpha == false) {
+                    //     first_word = false;
+                    // }
+                    no_alpha = true;
                 }
 
                 if (isalpha(*ptr)) {
-                    //printf("the char is %c, and the bool first_alpha is %d \n", *ptr, first_alpha);
-                    
-                    
+                    //printf("the char is %c, and the bool no_alpha is %d \n", *ptr, no_alpha);
                     if (first_word) {
                         sentence[idx] = tolower(*ptr);
-                    } else if (!first_word && first_alpha) {
+                    } else if (!first_word && no_alpha) {
                         sentence[idx] = toupper(*ptr);
-                    } else if (!first_word && !first_alpha) {
+                    } else if (!first_word && !no_alpha) {
                         sentence[idx] = tolower(*ptr);
                     }
-                    first_alpha = false;
+                    no_alpha = false;
+                    had_value_in = true;
                     idx++;
-
                 }
                 ptr++;
             }

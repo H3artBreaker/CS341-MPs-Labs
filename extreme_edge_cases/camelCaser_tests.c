@@ -24,6 +24,7 @@ int test_camelCaser(char **(*camelCaser)(const char *),
     input[8] = " 9hello      world.     ";
     input[9] = "  n o     p u n c t   a n d    l o t o f s p a c e";
     input[10] = " DDsa. 9S 6st.";
+    input[11] = "3 rings.";
 
     
     if (!test_helper(camelCaser, destroy, input[0], NULL)) {
@@ -69,6 +70,11 @@ int test_camelCaser(char **(*camelCaser)(const char *),
     if (!test_helper(camelCaser, destroy, input[10], (char*[]){"ddsa", "9s6St", NULL})) {
         return 0;
     }
+
+    if (!test_helper(camelCaser, destroy, input[11], (char*[]){"3Rings", NULL})) {
+        return 0;
+    }
+
 
     return 1;
 }
