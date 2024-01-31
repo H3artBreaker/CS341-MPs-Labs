@@ -231,6 +231,12 @@ void clear_bits(long int value, long int flag) {
  */
 void little_automaton(int (*transition)(int, char), const char *input_string) {
     int state = 0;
+    if (input_string == NULL) {
+        return;
+    }
     // put something here
+    for (size_t i = 0; input_string[i] != '\0'; i++) {
+        state = transition(state, input_string[i]);
+    }
     printf("final state: %d\n", state);
 }
