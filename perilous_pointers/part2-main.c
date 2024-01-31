@@ -66,7 +66,7 @@ int main() {
     it_may_be_odd(imbo, 2);
 
     //void tok_step(char *str)
-    char ts[] = "CS241,CS241";
+    char ts[] = " ,CS341";
     tok_step(ts);
 
     //void the_end(void *orange, void *blue)

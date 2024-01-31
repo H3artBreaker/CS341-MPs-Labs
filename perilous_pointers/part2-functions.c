@@ -102,7 +102,7 @@ void tok_step(char *str) {
     }
     char *a = strtok(str, ",");
     a = strtok(NULL, ",");
-    if (strcmp(a, "CS241") == 0) {
+    if (strcmp(a, "CS341") == 0) {
         printf("10: Illinois\n");
     } else {
         printf("tok_step failed\n");
