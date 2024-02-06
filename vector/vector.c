@@ -236,7 +236,7 @@ void vector_insert(vector *this, size_t position, void *element) {
     this->size++;
     if (this->size > this->capacity) {
         this->capacity = get_new_capacity(this->capacity + 1);
-        this->array = realloc(this->array, this->capacity * sizeof(char*));
+        this->array = realloc(this->array, this->capacity * sizeof(void*));
     }
 
     for (size_t i = this->size - 1; i > position; i--) {
