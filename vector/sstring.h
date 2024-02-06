@@ -49,7 +49,7 @@ char *sstring_to_cstr(sstring *this);
  * to the first.
  * Example:
  *
- * sstring *str1 = cstr_to_sstring("abc");
+ * sstring *str1 = cstr_to_sstring("abc");        
  * sstring *str2 = cstr_to_sstring("def");
  * int len = sstring_append(str1, str2); // len == 6
  * sstring_to_cstr(str1); // == "abcdef"
