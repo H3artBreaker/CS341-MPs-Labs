@@ -213,7 +213,7 @@ void vector_push_back(vector *this, void *element) {
     
     this->size++;
     if (this->size > this->capacity) {
-        this->capacity = get_new_capacity(this->capacity * GROWTH_FACTOR);
+        this->capacity = get_new_capacity(this->capacity + 1);
         this->array = realloc(this->array, this->capacity * sizeof(void*));
     }
     this->array[this->size - 1] = this->copy_constructor(element);
@@ -231,12 +231,12 @@ void vector_pop_back(vector *this) {
 
 void vector_insert(vector *this, size_t position, void *element) {
     assert(this);
-    assert(position <= this->size);
+    //assert(position <= this->size);
 
     this->size++;
     if (this->size > this->capacity) {
-        this->capacity = get_new_capacity(this->capacity * GROWTH_FACTOR);
-        this->array = realloc(this, this->capacity * sizeof(char*));
+        this->capacity = get_new_capacity(this->capacity + 1);
+        this->array = realloc(this->array, this->capacity * sizeof(char*));
     }
 
     for (size_t i = this->size - 1; i > position; i--) {
