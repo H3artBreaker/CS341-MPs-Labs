@@ -27,7 +27,7 @@ sstring *cstr_to_sstring(const char *input) {
 
 char *sstring_to_cstr(sstring *input) {
     // your code goes here
-    char* str = malloc(sizeof(input->string) + 1);
+    char* str = malloc(strlen(input->string) + 1);
     strcpy(str, input->string);
     return str;
 }
@@ -90,7 +90,7 @@ char *sstring_slice(sstring *this, int start, int end) {
     char* slice = malloc(end - start + 1);
     strncpy(slice, this->string + start, end - start);
     slice[end - start] = '\0';
-    return NULL;
+    return slice;
 }
 
 void sstring_destroy(sstring *this) {

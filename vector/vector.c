@@ -4,6 +4,7 @@
  */
 #include "vector.h"
 #include <assert.h>
+#include <stdio.h>
 
 struct vector {
     /* The function callback for the user to define the way they want to copy
@@ -230,21 +231,18 @@ void vector_pop_back(vector *this) {
 
 void vector_insert(vector *this, size_t position, void *element) {
     assert(this);
-    assert(position > 0 && position <= this->size);
+    assert(position <= this->size);
 
     this->size++;
     if (this->size > this->capacity) {
         this->capacity = get_new_capacity(this->capacity * GROWTH_FACTOR);
         this->array = realloc(this, this->capacity * sizeof(char*));
     }
-    void* prev = this->array[position - 1];
-    this->array[position - 1] = this->copy_constructor(element);
-    for (size_t i = position; i < this->size; i++) { 
-        void* curr = this->array[position];
-        this->array[position] = prev;
-        prev = curr;
-    }
 
+    for (size_t i = this->size - 1; i > position; i--) {
+        this->array[i] = this->array[i - 1];
+    }
+    this->array[position] = this->copy_constructor(element);
 }
 
 void vector_erase(vector *this, size_t position) {
@@ -267,7 +265,7 @@ void vector_clear(vector *this) {
         (this->destructor)((this->array)[i]);
         this->array[i] = NULL;
     }
-    
+
     this->size = 0;
     
 }
