@@ -33,11 +33,11 @@ void split_string(const char* string) { // 0 1 2 3 = 5 6 7
     //extract key
     char* key = malloc(sizeof(char) * key_len + 1);
     memcpy(key, string, key_len);
-    key[strlen(key)] = '\0';
+    key[key_len] = '\0';
 
     //extract value
     char* value;
-    if (strchr(string + key_len + 1, '%') == NULL) {
+    if (strchr(equal_pos + 1, '%') == NULL) {
         value = strdup(equal_pos + 1);
         //setenv
         int env_set = setenv(key, value, 1);
@@ -50,7 +50,6 @@ void split_string(const char* string) { // 0 1 2 3 = 5 6 7
         value = strdup(equal_pos + 2);
         // printf("value is: %s and the value lenth is %ld \n", value, value_len);
         // printf("The same ? %d \n", strcmp(value, "TEMP"));
-        // printf("prev_value is 22222 %s ", getenv(value));
         char* prev_value = getenv(value);
         //printf("prev_value is %s ", prev_value);
         if (prev_value == NULL) {
