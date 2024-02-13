@@ -1,3 +1,5 @@
 hi
 echo hello
 ls
+echo trytry 
+cd includes

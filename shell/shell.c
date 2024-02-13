@@ -91,8 +91,8 @@ int shell(int argc, char *argv[]) {
             //char * file = get_full_path(optarg);
             load_history(file_path);   //Unfinished: not add exit #n,etc into history;
             // puts("in h");
-            history_file = optarg;
-            //history_file = get_full_path(optarg);
+            //history_file = file_path;
+            history_file = get_full_path(optarg);
             // printf("optarg is %s \n", optarg);
             //printf("history file path is %s \n", get_full_path(optarg));
             opend_history = true;
