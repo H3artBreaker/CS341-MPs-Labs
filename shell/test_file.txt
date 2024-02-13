@@ -1,4 +1,8 @@
-cd ..
-ls
-sleep 2
-echo Finished!
+echo try
+echo wow
+echo sss
+echo ssss
+echo try
+echo plesase 
+echo worked?
+echo wowowoowowowowowowo
