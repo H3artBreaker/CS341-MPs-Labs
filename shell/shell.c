@@ -118,7 +118,7 @@ int shell(int argc, char *argv[]) {
                 } 
                 vector_destroy(cmds);
             }
-
+            free(file_path);
             vector_destroy(history_vector);
             vector_destroy(process_vector);
             return 0;
@@ -161,15 +161,17 @@ int shell(int argc, char *argv[]) {
     }
     if (opend_history) {
         //puts("HEE");
-        char* file = get_full_path(history_file);
+        //char* file = get_full_path(history_file);
         //printf("History file in change is %s \n", file);
-        FILE* fd = fopen(file, "w");
+        //printf("his is %s \n", history_file);
+        FILE* fd = fopen(history_file, "w");
         for (size_t i = 0; i < vector_size(history_vector); i++) {
             fputs(vector_get(history_vector, i), fd);
             fputs("\n", fd);
         }
         fclose(fd);
-        free(file);
+        //free(file);
+        free(history_file);
     }
 
     free(buffer);
