@@ -1,8 +1,3 @@
-echo try
-echo wow
-echo sss
-echo ssss
-echo try
-echo plesase 
-echo worked?
-echo wowowoowowowowowowo
+hi
+echo hello
+ls

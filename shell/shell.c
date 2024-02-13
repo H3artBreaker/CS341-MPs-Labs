@@ -193,9 +193,13 @@ int built_in_commands(char* cmd) {
     vector* cmd_args = strsplit(cmd, ' '); //split each arguments into vector elements
     if (strcmp(vector_get(cmd_args, 0), "cd") == 0) {
         result = 100;
-        if (vector_size(cmd_args) == 1) {
-            result = 0;
-            print_no_directory(cmd);
+        if (vector_size(cmd_args) != 2) {
+            if (vector_size(cmd_args) == 1) {
+                result = 0;
+                print_no_directory(cmd);
+            } else {
+                print_invalid_command(cmd);
+            }
         } else {
             if (chdir(vector_get(cmd_args, 1)) != 0) { 
                 result = 0;
@@ -203,14 +207,14 @@ int built_in_commands(char* cmd) {
             } 
         }
         vector_push_back(history_vector, cmd);
-    } else if (strcmp(vector_get(cmd_args, 0), "!history") == 0) {
+    } else if (strcmp(vector_get(cmd_args, 0), "!history") == 0 && vector_size(cmd_args) == 1) {
         result = 100;
         for (size_t i = 0; i < vector_size(history_vector); i++) {
             print_history_line(i, vector_get(history_vector, i));
         }
     } else if (*cmd == '#') {
         result = 100;
-        if (strlen(cmd) == 1) { //check if there is anything after #
+        if (strlen(cmd) == 1 || vector_size(cmd_args) > 1) { //check if there is anything after # or have more than one argument
             result = 0;
             print_invalid_command(cmd);
             vector_destroy(cmd_args);
@@ -413,7 +417,6 @@ bool external_commands(char* cmd) {
         print_fork_failed();
     } else if (pid == 0) {
         int childpid = getpid();
-        //puts("OOPPS");
         print_command_executed(childpid);
         //print_command(childpid);
         //why vector_push_back(history_vector, cmd); does not work here? because it is in another process?
@@ -427,13 +430,13 @@ bool external_commands(char* cmd) {
     } else {
         int status;
         waitpid(pid, &status, 0);
+        vector_push_back(history_vector, cmd);
         if (!WIFEXITED(status) || status != 0) {
             print_wait_failed();
             result = false;
             vector_destroy(args);
             return result;
         }
-        vector_push_back(history_vector, cmd);
     }
     vector_destroy(args);
 
