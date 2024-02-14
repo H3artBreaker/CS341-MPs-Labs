@@ -170,3 +170,8 @@ void *mini_realloc(void *ptr, size_t request_size, const char *filename,
  *  passed, no action occurs, and it does not count as a bad free.
  */
 void mini_free(void *ptr);
+
+
+int invalid(void *ptr);
+
+meta_data *previous(meta_data *ptr);
