@@ -24,6 +24,7 @@ vector* read_file(char* file);
 void and_operation(char *cmd);
 void or_operation(char* cmd);
 void seperator_operation(char* cmd);
+void add_process(char* cmd, pid_t pid);
 static char* history_file = NULL;
 
 extern char *optarg;
@@ -80,7 +81,7 @@ int shell(int argc, char *argv[]) {
     }
     signal(SIGINT, SIG_IGN);
     process_vector = shallow_vector_create();
-
+    //add_process(argv[0], getpid()); 
     history_vector = string_vector_create();
     bool opend_history = false;
 
@@ -89,12 +90,10 @@ int shell(int argc, char *argv[]) {
         char * file_path = get_full_path(optarg);
         if (opt == 'h') {
             //char * file = get_full_path(optarg);
-            load_history(file_path);   //Unfinished: not add exit #n,etc into history;
+            load_history(file_path);  
             // puts("in h");
             //history_file = file_path;
             history_file = get_full_path(optarg);
-            // printf("optarg is %s \n", optarg);
-            //printf("history file path is %s \n", get_full_path(optarg));
             opend_history = true;
         } else if (opt == 'f') {
             vector* cmds = read_file(file_path);
@@ -160,17 +159,13 @@ int shell(int argc, char *argv[]) {
 
     }
     if (opend_history) {
-        //puts("HEE");
         //char* file = get_full_path(history_file);
-        //printf("History file in change is %s \n", file);
-        //printf("his is %s \n", history_file);
         FILE* fd = fopen(history_file, "w");
         for (size_t i = 0; i < vector_size(history_vector); i++) {
             fputs(vector_get(history_vector, i), fd);
             fputs("\n", fd);
         }
         fclose(fd);
-        //free(file);
         free(history_file);
     }
 
@@ -284,7 +279,7 @@ int built_in_commands(char* cmd) {
 }
 
 vector* strsplit(char* cmd, char delim) {
-    //puts("IM IN!!!");
+    
     sstring* sstring = cstr_to_sstring(cmd); 
     vector* cmd_args_vec = sstring_split(sstring, delim); 
     
@@ -407,40 +402,95 @@ void seperator_operation(char* cmd) {
 
 bool external_commands(char* cmd) {
     //bool is_background = false;
-    vector* args = strsplit(cmd, ' ');
+    
     bool result = true;
     if (strcmp(cmd, "exit") == 0) {
         exit(1);
     }
-    fflush(stdout);
-    pid_t pid = fork();
-    
-    if (pid == -1) {
-        print_fork_failed();
-    } else if (pid == 0) {
-        int childpid = getpid();
-        print_command_executed(childpid);
-        //print_command(childpid);
-        //why vector_push_back(history_vector, cmd); does not work here? because it is in another process?
-        char** vf = (char**)vector_front(args);
-
-        //print_command(*vf);
-        execvp(*vf, vf);
-        // puts("OOPPS");
-        print_exec_failed(*vf);
-        exit(1);
-    } else {
-        int status;
-        waitpid(pid, &status, 0);
-        vector_push_back(history_vector, cmd);
-        if (!WIFEXITED(status) || status != 0) {
-            print_wait_failed();
-            result = false;
-            vector_destroy(args);
-            return result;
+    if(cmd[strlen(cmd) - 1] == '&') {
+        //background process
+        if (cmd[strlen(cmd) - 2] == ' ') {
+            fflush(stdout);
+            pid_t pid = fork();
+            //puts("IM IN!!!");
+            // SIGCHILD
+            cmd[strlen(cmd) - 2] = 0;
+            vector* args = strsplit(cmd, ' ');
+            if (pid == -1) {
+                print_fork_failed();
+                result = false;
+            } else if (pid == 0) {
+                int childpid = getpid();
+                if (setpgid(childpid, childpid) == -1) {
+                    print_setpgid_failed();
+                    result = false;
+                    vector_destroy(args);
+                    vector_destroy(process_vector);
+                    vector_destroy(history_vector);
+                    exit(1);
+                }
+                print_command_executed(childpid);
+                // printf("BEFORE size is: %zu \n", vector_size(args));
+                // printf("LAST ITEM IS is: %s \n", *((char**)vector_back(args)));
+                // vector_pop_back(args);
+                // printf("after size is: %zu \n", vector_size(args));
+                // printf("LAST ITEM IS is: %s \n", *((char**)vector_back(args)));
+                char** vf = (char**)vector_front(args);
+                execvp(*vf, vf);
+                print_exec_failed(*vf);
+                puts("HIIII!!!");
+                exit(1);
+            } else {
+                
+                add_process(cmd, pid);
+            }
         }
-    }
-    vector_destroy(args);
+    } else {
+        //normal external execution
+        vector* args = strsplit(cmd, ' ');
+        fflush(stdout);
+        pid_t pid = fork();
+        
+        if (pid == -1) {
+            print_fork_failed();
+            result = false;
+        } else if (pid == 0) {
+            int childpid = getpid();
+            print_command_executed(childpid);
+            //print_command(childpid);
+            //why vector_push_back(history_vector, cmd); does not work here? because it is in another process?
+            char** vf = (char**)vector_front(args);
 
+            //print_command(*vf);
+            execvp(*vf, vf);
+            print_exec_failed(*vf);
+            exit(1);
+        } else {
+            int status;
+            waitpid(pid, &status, 0);
+            vector_push_back(history_vector, cmd);
+            if (!WIFEXITED(status) || status != 0) {
+                print_wait_failed();
+                result = false;
+                vector_destroy(args);
+                return result;
+            }
+        }
+        vector_destroy(args);
+    }
+    
+    
     return result;
+}
+
+
+void add_process(char* cmd, pid_t pid) {
+    process* p = malloc(sizeof(process));
+    if (p == NULL) {
+        return;
+    }
+    p->command = malloc(sizeof(cmd) + 1); //why we need to copy
+    strcpy(p->command, cmd);
+    p->pid = pid;
+    vector_push_back(process_vector, p);
 }

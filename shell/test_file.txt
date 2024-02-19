@@ -3,3 +3,7 @@ echo hello
 ls
 echo trytry 
 cd includes
+echo hi
+cd includes
+vgdhugvghscudij
+exitexit
