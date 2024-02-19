@@ -438,7 +438,7 @@ bool external_commands(char* cmd) {
                 char** vf = (char**)vector_front(args);
                 execvp(*vf, vf);
                 print_exec_failed(*vf);
-                puts("HIIII!!!");
+                //puts("HIIII!!!");
                 exit(1);
             } else {
                 
