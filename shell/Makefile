@@ -6,6 +6,7 @@ EXE_SHELL=shell
 EXES_STUDENT=$(EXE_SHELL)
 
 OBJS_SHELL=$(EXE_SHELL).o format.o $(EXE_SHELL)_main.o
+OBJS_TEST=$(EXE_SHELL).o format.o $(shell find tests/ -name '*.c' | sed 's/\.c$$/.o/g')
 
 # set up compiler
 CC = clang
@@ -39,9 +40,11 @@ all: release
 # disappear
 .PHONY: release
 .PHONY: debug
+.PHONY: test
 
 release: $(EXES_STUDENT)
 debug: clean $(EXES_STUDENT:%=%-debug)
+test: clean $(EXES_STUDENT:%=%-test)
 
 # include dependencies
 -include $(OBJS_DIR)/*.d
@@ -58,11 +61,18 @@ $(OBJS_DIR)/%-debug.o: %.c | $(OBJS_DIR)
 $(OBJS_DIR)/%-release.o: %.c | $(OBJS_DIR)
 	$(CC) $(CFLAGS_RELEASE) $< -o $@
 
+$(OBJS_DIR)/%-test.o: %.c | $(OBJS_DIR)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_DEBUG) $< -o $@
+
 # exes
 $(EXE_SHELL)-debug: $(OBJS_SHELL:%.o=$(OBJS_DIR)/%-debug.o)
 	$(LD) $^ $(LDFLAGS) -o $@
 
 $(EXE_SHELL): $(OBJS_SHELL:%.o=$(OBJS_DIR)/%-release.o)
+	$(LD) $^ $(LDFLAGS) -o $@
+
+$(EXE_SHELL)-test: $(OBJS_TEST:%.o=$(OBJS_DIR)/%-test.o)
 	$(LD) $^ $(LDFLAGS) -o $@
 
 .PHONY: clean
