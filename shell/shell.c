@@ -736,14 +736,16 @@ bool external_commands(char* cmd) {
                 vector_set(args, vector_size(args) - 2, 0);
             }
             if (has_redi_input) {
-                dup2(fd, STDIN_FILENO); // Redirect stdin for input
-                //printf("CMD before %s \n", *((char**)vector_front(args)));
-                vector_set(args, vector_size(args) - 1, 0);
-                vector_set(args, vector_size(args) - 2, file_name);
-                // printf("CMD before %s \n", *((char**)vector_front(args)));
-                close(fd);
+                // dup2(fd, STDIN_FILENO); // Redirect stdin for input
+                
+                // vector_set(args, vector_size(args) - 2, file_name);
+                // vector_set(args, vector_size(args) - 1, 0);
+                // close(fd);
+                dup2(fd, STDIN_FILENO);
+                close(fd);     
+                vector_set(args, vector_size(args) - 2, 0);
             }
-            
+            //printf("CMD IS %s \n", *((char**)vector_front(args)));
             char** vf = (char**)vector_front(args);
             execvp(*vf, vf);
             print_exec_failed(*vf);
