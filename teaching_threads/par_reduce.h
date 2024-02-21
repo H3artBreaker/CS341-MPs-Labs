@@ -24,4 +24,6 @@
  */
 int par_reduce(int *list, size_t length, reducer reducer_func, int base_case,
                size_t num_threads);
+               
+void* start_routine(void* task); //does it have to be void* for return type?
 #endif /* __CS241_PAR_REDUCE_H__ */
