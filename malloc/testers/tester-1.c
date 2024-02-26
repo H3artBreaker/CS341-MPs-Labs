@@ -4,7 +4,7 @@
  */
 #include "tester-utils.h"
 
-#define NUM_CYCLES 10000000
+#define NUM_CYCLES 10000000 //10000000
 
 int main(int argc, char *argv[]) {
     int i;

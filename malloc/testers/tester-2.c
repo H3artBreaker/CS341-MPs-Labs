@@ -25,7 +25,6 @@ int main(int argc, char *argv[]) {
 
         *(arr[i]) = i;
     }
-
     for (i = 0; i < TOTAL_ALLOCS; i++) {
         if (*(arr[i]) != i) {
             fprintf(stderr, "Memory failed to contain correct data after many "
@@ -33,9 +32,12 @@ int main(int argc, char *argv[]) {
             return 2;
         }
     }
-
-    for (i = 0; i < TOTAL_ALLOCS; i++)
+    //printf("RUNNING HERE the TOTal is %ld \n", TOTAL_ALLOCS);
+    for (i = 0; i < TOTAL_ALLOCS; i++) {
+        //printf("the i is %d\n", i);
         free(arr[i]);
+    }
+        
 
     free(arr);
     fprintf(stderr, "Memory was allocated, used, and freed!\n");
