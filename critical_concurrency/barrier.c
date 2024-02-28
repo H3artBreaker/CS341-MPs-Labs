@@ -35,21 +35,29 @@ int barrier_wait(barrier_t *barrier) {
 
     pthread_mutex_lock(&(barrier->mtx));
 
+    // if (barrier->count == barrier->n_threads) {
+    //     (barrier->times_used)++;
+    //     barrier->count = 0; // Reset count for reuse
+    //     pthread_cond_broadcast(&barrier->cv); // Wake up all waiting thread
+    // }
+    // while (barrier->cycle != 0) {
+
+    // }
     if (barrier->count == barrier->n_threads) {
-        (barrier->times_used)++;
-        barrier->count = 0; // Reset count for reuse
-        pthread_cond_broadcast(&barrier->cv); // Wake up all waiting thread
+        barrier->count = 0; 
+        barrier->times_used++; // Increment the times the barrier has been used
+        pthread_cond_broadcast(&barrier->cv); // Wake up all waiting threads
+    } else {
+        unsigned int cycle = barrier->times_used;
+        while (cycle == barrier->times_used && barrier->count < barrier->n_threads) {
+            pthread_cond_wait(&barrier->cv, &barrier->mtx);
+        }
     }
-    while (barrier->cycle != 0) {
-
-    }
-
-    
-
 
 
 
     pthread_mutex_unlock(&(barrier->mtx));
+    
 
     return 0;
 }
