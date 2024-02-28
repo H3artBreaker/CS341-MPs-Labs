@@ -45,22 +45,28 @@ queue *queue_create(ssize_t max_size) {
     pthread_cond_init(&(q->cv), NULL);
     pthread_mutex_init(&(q->m), NULL);
 
-    return NULL;
+    return q;
 }
 
 void queue_destroy(queue *this) {
     if (this == NULL) {
         return;
     }
+    // queue_node* curr = this->head;
+    // queue_node* after = curr->next;
+    // while (curr != this->tail && curr != NULL) {
+    //     free(curr);
+    //     curr = after;
+    //     after = after->next;
+    // }
+    // if (curr == this->tail && after == NULL) {
+    //     free(curr);
+    // }
     queue_node* curr = this->head;
-    queue_node* after = curr->next;
-    while (curr != this->tail) {
-        free(curr);
-        curr = after;
-        after = after->next;
-    }
-    if (curr == this->tail && after == NULL) {
-        free(curr);
+    while (curr != NULL) {
+        queue_node* temp = curr;
+        curr = curr->next;
+        free(temp);
     }
     pthread_cond_destroy(&(this->cv));
     pthread_mutex_destroy(&(this->m));
