@@ -3,15 +3,17 @@
  * CS 341 - Spring 2024
  */
 #include "tester-utils.h"
+#include <unistd.h>
 
 #define SIZE (128 * M)
-#define ITERS 100000
+#define ITERS 100000 // 100000
 
 int main(int argc, char *argv[]) {
     malloc(1);
 
     int i;
     for (i = 0; i < ITERS; i++) {
+        //write(1, "i is %d \n", i);
         char *a = malloc(SIZE + i);
         if (!a)
             return 1;

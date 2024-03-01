@@ -8,7 +8,7 @@
 #define MAX_ALLOC_SIZE 1024 * 100
 #define CHANCE_OF_FREE 30
 #define CHANCE_OF_REALLOC 80
-#define TOTAL_ALLOCS 90000
+#define TOTAL_ALLOCS 90000 // 90000
 
 int main(int argc, char *argv[]) {
     srand(rand_today());
@@ -40,10 +40,12 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Memory failed to allocate!\n");
             return 1;
         }
-
-        if (rand() % 100 < CHANCE_OF_FREE)
+        
+        if (rand() % 100 < CHANCE_OF_FREE){
+            
             free(ptr);
-        else {
+        } else {
+            
             if (!data_written) {
                 *((void **)ptr) = &dictionary[dictionary_ct];
                 data_written = 1;
@@ -60,7 +62,7 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-
+    printf("HERERE");
     for (i = dictionary_ct - 1; i >= 0; i--) {
         if (*((void **)dictionary[i]) != &dictionary[i]) {
             fprintf(

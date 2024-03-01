@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define MAGIC_DEBUG 1
+#define MAGIC_DEBUG 0
 typedef struct _meta_data {
     // Number of bytes of heap memory the user requested from malloc
     size_t request_size;
@@ -27,82 +27,61 @@ typedef struct _meta_data {
 
 } meta_data;
 
-typedef struct _boundary_tag {
-    // Number of bytes of heap memory the user requested from malloc
-    size_t request_size;
-
-    int is_allocated; //0 is free, 1 is allocated
-
-#if MAGIC_DEBUG
-    int magic;
-#endif
-
-} boundary_tag;
-
-#define BTAG_SIZE  sizeof(boundary_tag) 
 #define METATAG_SIZE  sizeof(meta_data) 
 
-static size_t currently_freed;
+static size_t currently_freed = 0;
 static meta_data* head = NULL;
+static meta_data* tail = NULL;
+
+void coalesce(meta_data* right) {
+    //set the new_size 
+    meta_data* left = right->prev;
+    size_t new_size = left->request_size + METATAG_SIZE + right->request_size;
+
+    // coalesce two blocks
+    left->request_size = new_size;
+    left->next = right->next;
+    if (right->next != NULL) {
+        right->next->prev = left;
+    } else {
+        tail = left;
+    }
+}
 
 
-// void split(meta_data* metaTag, size_t size) {
-//     meta_data* rmn_metaTag = (meta_data*)((char*)metaTag + METATAG_SIZE + size + BTAG_SIZE);
-//     size_t rmn_size = metaTag->request_size - size - BTAG_SIZE - METATAG_SIZE;
-//     rmn_metaTag->request_size = rmn_size;
-//     rmn_metaTag->is_allocated = 0;
-//     rmn_metaTag->magic = 0x1111;
-//     //set remaining's boundary tag
-//     boundary_tag* rmn_btag = (boundary_tag*)((char*)rmn_metaTag + METATAG_SIZE + rmn_size);
-//     rmn_btag->request_size = rmn_size;
-//     rmn_btag->is_allocated = 0;
+void split(meta_data* metaTag, size_t size) {
+    size_t rmn_size = metaTag->request_size - size - METATAG_SIZE;
+    //set the free part
+    currently_freed += rmn_size;
 
-//     metaTag->request_size = size;
-//     metaTag->is_allocated = 0;
-//     metaTag->next = rmn_metaTag;
-//     metaTag->magic = 0x2222;
-//     //set new btag
-//     boundary_tag* new_btag = (boundary_tag*)((char*)metaTag + METATAG_SIZE + size);
-//     new_btag->request_size = size;
-//     new_btag->is_allocated = 0;
+    //set rmn
+    meta_data* rmn_metaTag = (meta_data*)((char*)metaTag + METATAG_SIZE + size);
+    rmn_metaTag->request_size = rmn_size;
+    rmn_metaTag->is_allocated = 0;
 
-//     //set relation
-//     rmn_metaTag->prev = metaTag;
-//     rmn_metaTag->next = metaTag->next;
+    //set new metaTag
+    metaTag->request_size = size;
 
-//     metaTag->next = rmn_metaTag;
+    //set relation
+    rmn_metaTag->prev = metaTag;
+    rmn_metaTag->next = metaTag->next;
+
+    metaTag->next = rmn_metaTag;
     
-//     if (rmn_metaTag->next != NULL) {
-//         rmn_metaTag->next->prev = rmn_metaTag;
-//     }
+    if (rmn_metaTag->next != NULL) {
+        rmn_metaTag->next->prev = rmn_metaTag;
+    } else {
+        tail = rmn_metaTag;
+    }
 
+
+    if (rmn_metaTag->next && rmn_metaTag->next->is_allocated == 0) {
+        currently_freed += METATAG_SIZE;
+        coalesce(rmn_metaTag->next);
+    }
 
     
-// }
-
-
-
-/**
- * Allocate memory block
- *
- * Allocates a block of size bytes of memory, returning a pointer to the
- * beginning of the block.  The content of the newly allocated block of
- * memory is not initialized, remaining with indeterminate values.
- *
- * @param size
- *    Size of the memory block, in bytes.
- *
- * @return
- *    On success, a pointer to the memory block allocated by the function.
- *
- *    The type of this pointer is always void*, which can be cast to the
- *    desired type of data pointer in order to be dereferenceable.
- *
- *    If the function failed to allocate the requested block of memory,
- *    a null pointer is returned.
- *
- * @see http://www.cplusplus.com/reference/clibrary/cstdlib/malloc/
- */
+}
 
 void *malloc(size_t size) {
     meta_data* block = NULL;
@@ -110,28 +89,20 @@ void *malloc(size_t size) {
         meta_data* curr = head;
         while (curr) {
             if (size <= curr->request_size && curr->is_allocated == 0) {
-                if (size <= curr->request_size) {
+                if (size == curr->request_size) {
                     currently_freed -= curr->request_size;
                     curr->is_allocated = 1;
-                    boundary_tag* curr_btag = (boundary_tag*)((char*)(curr + 1) + curr->request_size);
-                    //curr_btag->request_size = size;
-                    curr_btag->is_allocated = 1;
                     return (void*)(curr + 1);
                 }
-
-                //for part 1
-                // if (size < curr->request_size) {
-                //     currently_freed -= size;
-                //     curr->is_allocated = 1;
-                //     boundary_tag* curr_btag = (boundary_tag*)((char*)(curr + 1) + curr->request_size);
-
-                // }
-                // if (curr->request_size - size > BTAG_SIZE + METATAG_SIZE) { //can split into 2 //do I need to consider the situation if they are the same?
-                //     currently_freed -= size;
-                //     block = curr;
-                //     split(block, size);
-                //     break;
-                // }
+                //when size < curr->request_size
+                if (curr->request_size - size > METATAG_SIZE && curr->request_size - size - METATAG_SIZE >= 4096) { //can split into 2 //do I need to consider the situation if they are the same?
+                    //currently_freed = currently_freed - size - METATAG_SIZE;
+                    //currently_freed -= METATAG_SIZE;
+                    currently_freed -= curr->request_size;
+                    block = curr;
+                    split(block, size);
+                    break;
+                }
             }
             curr = curr->next;
         }
@@ -139,113 +110,62 @@ void *malloc(size_t size) {
 
     if (block != NULL) { //found block
         block->is_allocated = 1;
-        boundary_tag* btag = (boundary_tag*)((char*)(block + 1) + size);
-        btag->is_allocated = 1;
-        btag->request_size = size;
         return (void*)(block + 1);
     }
 
 
     if (sbrk(0) == (void*) -1) {
-        perror("ERROR IN SBRK IN MALLOC!");
+        write(2, "ERROR IN SBRK IN MALLOC!", strlen("ERROR IN SBRK IN MALLOC!"));
         return NULL;
     }
     block = sbrk(0); //get current break(the location closest to the end of the heap)
-    if (sbrk(METATAG_SIZE + size + BTAG_SIZE) == (void*) -1) { //push the break forward if successes.
-        perror("ERROR IN SBRK IN MALLOC!");
+    if (sbrk(METATAG_SIZE + size) == (void*) -1) { //push the break forward if successes.
+        write(2, "ERROR IN SBRK IN MALLOC!", strlen("ERROR IN SBRK IN MALLOC!"));
         return NULL;
     }
     block->request_size = size;
     block->is_allocated = 1;
     block->prev = NULL;
     block->next = NULL;
-    block->magic = 0x3333;
+    //block->magic = 0x3333;
 
-    //set btag
-    boundary_tag* btag = (boundary_tag*)((char*)(block + 1) + size);
-    btag->request_size = size;
-    btag->is_allocated = 1; 
     if (head == NULL) {
         head = block;
+        tail = head;
     } else {
-        block->next = head;
-        head->prev = block;
-        head = block;
+        tail->next = block;
+        block->prev = tail;
+        tail = block;
     }
 
-    return (void*)(head + 1);
+    return tail + 1;
 }
 
-// void coalesce(meta_data* prev, meta_data* behind) {
-//     //set the new_size 
-//     size_t new_size = prev->request_size + BTAG_SIZE + METATAG_SIZE + behind->request_size;
-//     //change the behind btag info
-//     boundary_tag* beh_btag = (boundary_tag*)((char*)behind + METATAG_SIZE + behind->request_size);
-//     beh_btag->is_allocated = 0;
-//     beh_btag->request_size = new_size;
-//     //printf("WOOWOW");
 
-//     //coalesce two blocks
-//     prev->request_size = new_size;
-//     prev->next = behind->next;
-//     if (behind->next != NULL) {
-//         behind->next->prev = prev;
-//     }
-//     prev->is_allocated = 0;
-
-// }
-
-
-
-
-/**
- * Deallocate space in memory
- *
- * A block of memory previously allocated using a call to malloc(),
- * calloc() or realloc() is deallocated, making it available again for
- * further allocations.
- *
- * Notice that this function leaves the value of ptr unchanged, hence
- * it still points to the same (now invalid) location, and not to the
- * null pointer.
- *
- * @param ptr
- *    Pointer to a memory block previously allocated with malloc(),
- *    calloc() or realloc() to be deallocated.  If a null pointer is
- *    passed as argument, no action occurs.
- */
 void free(void *ptr) {
     // implement free!
     if (ptr == NULL) {
         return;
     }
     meta_data* metaTag = (meta_data*)ptr - 1;
-    boundary_tag* btag = (boundary_tag*)((char*)metaTag + METATAG_SIZE + metaTag->request_size);
-    // if (metaTag->is_allocated != btag->is_allocated) {
-    //     perror("THERE IS A OVERFLOW!!!");
-    //     return;
-    // }
-    if (metaTag->is_allocated == 0 || btag->is_allocated == 0) {
+    if (metaTag->is_allocated == 0) {
         return;
     }
     metaTag->is_allocated = 0;
     currently_freed += metaTag->request_size;
 
-    //for part1
-    btag->is_allocated = 0;
-
     //combine the block if prev is free too
-    // if (metaTag->prev != NULL && (metaTag->prev)->is_allocated == 0) {
-    //     currently_freed = currently_freed + BTAG_SIZE + METATAG_SIZE;
-    //     coalesce(metaTag->prev, metaTag);
-    //     //coalesce(metaTag);
-    // }
-    // if (metaTag->next != NULL && (metaTag->next)->is_allocated == 0) {
-    //     currently_freed = currently_freed + BTAG_SIZE + METATAG_SIZE;
-    //     coalesce(metaTag, metaTag->next);
-    //     //coalesce(metaTag->next);
-    // }
+    if (metaTag->prev != NULL && (metaTag->prev)->is_allocated == 0) {
+        currently_freed = currently_freed + METATAG_SIZE;
+        coalesce(metaTag);
+    }
+    if (metaTag->next != NULL && (metaTag->next)->is_allocated == 0) {
+        currently_freed = currently_freed + METATAG_SIZE;
+        coalesce(metaTag->next);
+    }
 }
+
+
 
 
 /**
@@ -272,8 +192,12 @@ void free(void *ptr) {
  * @see http://www.cplusplus.com/reference/clibrary/cstdlib/calloc/
  */
 void *calloc(size_t num, size_t size) {
-    // implement calloc!
-    return NULL;
+    void* cal = malloc(num * size);
+    if (cal == NULL) {
+        return NULL;
+    }
+    memset(cal, 0, num * size);
+    return cal;
 }
 
 /**
@@ -341,21 +265,49 @@ void *realloc(void *ptr, size_t size) {
     }
 
     if (new_size > old_size) {
-        void* bigger = malloc(size);
-        memcpy(bigger, ptr, metaTag->request_size);
+        // if coalese has the same size
+        if (metaTag->next != NULL && metaTag->next->is_allocated == 0 
+            && metaTag->next->request_size + METATAG_SIZE + metaTag->request_size == new_size) {
+            
+            meta_data* right = metaTag->next;
+            currently_freed += METATAG_SIZE;
+            coalesce(right);
+            return metaTag + 1;
+        }
+        if (metaTag->next != NULL && metaTag->next->is_allocated == 0 
+            && metaTag->next->request_size + METATAG_SIZE + metaTag->request_size > new_size) {
+            if (metaTag->next->request_size + METATAG_SIZE + metaTag->request_size - new_size > METATAG_SIZE) {
+                meta_data* right = metaTag->next;
+                currently_freed += METATAG_SIZE;
+                coalesce(right);
+                currently_freed = currently_freed - right->request_size;
+                split(metaTag, new_size);
+                return metaTag + 1;
+            }
+        } 
+
+        void* bigger = malloc(new_size);
+        memcpy(bigger, ptr, old_size);
         free(ptr);
         return bigger;
     }
 
     if (new_size < old_size) {
-        void* smaller = malloc(size);
-        memcpy(smaller, ptr, new_size);
-        free(ptr);
-        return smaller;
+        if (metaTag->request_size - new_size >= METATAG_SIZE) {
+            //currently_freed += (old_size - new_size); // did that in split
+            split(metaTag, new_size);
+            return metaTag + 1;
+        } else {
+            void* smaller = malloc(size);
+            memcpy(smaller, ptr, new_size);
+            free(ptr);
+            return smaller;
+        } 
+        // void* smaller = malloc(size);
+        // memcpy(smaller, ptr, new_size);
+        // free(ptr);
+        // return smaller;
     }
 
-
-
-    
     return NULL;
 }
