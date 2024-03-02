@@ -47,6 +47,8 @@ void coalesce(meta_data* right) {
         tail = left;
     }
 
+    //test for placing the unallocated at the front
+
     //test why does not work?
     // if (left->next != NULL && left->next->is_allocated == 0) {
     //     currently_freed += METATAG_SIZE;
@@ -92,7 +94,8 @@ void split(meta_data* metaTag, size_t size) {
 void *malloc(size_t size) {
     meta_data* block = NULL;
     if (currently_freed >= size) {
-        meta_data* curr = head;
+        //meta_data* curr = head;
+        meta_data* curr = tail;
         while (curr) {
             if (size <= curr->request_size && curr->is_allocated == 0) {
                 if (size == curr->request_size) {
@@ -108,7 +111,7 @@ void *malloc(size_t size) {
                     break;
                 }
             }
-            curr = curr->next;
+            curr = curr->prev;
         }
     }
 
