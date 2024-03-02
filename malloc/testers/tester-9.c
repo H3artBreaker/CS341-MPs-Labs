@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Memory failed to allocate!\n");
             return 1;
         }
-        
+    
         if (rand() % 100 < CHANCE_OF_FREE){
             
             free(ptr);

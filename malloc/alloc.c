@@ -46,6 +46,12 @@ void coalesce(meta_data* right) {
     } else {
         tail = left;
     }
+
+    //test why does not work?
+    // if (left->next != NULL && left->next->is_allocated == 0) {
+    //     currently_freed += METATAG_SIZE;
+    //     coalesce(left->next);
+    // }
 }
 
 
@@ -95,9 +101,7 @@ void *malloc(size_t size) {
                     return (void*)(curr + 1);
                 }
                 //when size < curr->request_size
-                if (curr->request_size - size > METATAG_SIZE && curr->request_size - size - METATAG_SIZE >= 4096) { //can split into 2 //do I need to consider the situation if they are the same?
-                    //currently_freed = currently_freed - size - METATAG_SIZE;
-                    //currently_freed -= METATAG_SIZE;
+                if (curr->request_size - size > METATAG_SIZE && curr->request_size - size - METATAG_SIZE >= size ) { //can split into 2 //do I need to consider the situation if they are the same?
                     currently_freed -= curr->request_size;
                     block = curr;
                     split(block, size);
