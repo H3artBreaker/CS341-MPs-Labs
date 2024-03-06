@@ -6,6 +6,7 @@
 #include "libdrm.h"
 #include "set.h"
 #include <pthread.h>
+#include <stdio.h>
 
 struct drm_t {
     pthread_mutex_t mutex;
@@ -42,6 +43,7 @@ int drm_post(drm_t *drm, pthread_t *thread_id) {
             if ((drm_t*)vector_get(to_thread, i) == drm) {
                 graph_remove_edge(drm_graph, drm, thread_id);
                 pthread_mutex_unlock(&(drm->mutex));
+                pthread_mutex_unlock(&m);
                 return 1;
             }
         }
@@ -63,7 +65,7 @@ bool is_cycle(graph* g, drm_t* start, set* visited) {
         }
     }
 
-    set_remove(visited, start);
+    //set_remove(visited, start);
 
     return false;
 }
@@ -97,14 +99,16 @@ int drm_wait(drm_t *drm, pthread_t *thread_id) {
         return 0;
     }
 
-    //no cycle 
-    //check if the resource is used by others
-    vector* drm_to = graph_neighbors(drm_graph, drm);
-    if (vector_empty(drm_to)) {
-        graph_remove_edge(drm_graph, thread_id, drm);
-        graph_add_edge(drm_graph, drm, thread_id);
-        pthread_mutex_lock(&(drm->mutex));
-    }
+    //no cycle  //check if the resource is used by others 
+    pthread_mutex_unlock(&m); //the reason we do unlock hers is the next line does not change the shared resource. 
+                                //Therefore, it is better to keep the critical section as tight as possible rather than leaving a whole thing
+
+    pthread_mutex_lock(&(drm->mutex)); // if the mutex is locked, this thread will be waiting. when it is not locked, we will change the edge then.
+    pthread_mutex_lock(&m); // we lock again is because we are gonna change the resource, the graph. As we know, generally one shared resource corresponds to one mutex
+
+    graph_remove_edge(drm_graph, thread_id, drm);
+    graph_add_edge(drm_graph, drm, thread_id);
+
     pthread_mutex_unlock(&m);
     return 1;
 }
