@@ -20,11 +20,11 @@ drm_t *drm_init() {
     drm_t* drm = malloc(sizeof(drm_t));
     pthread_mutex_init(&(drm->mutex), NULL);
     pthread_mutex_lock(&m);
-    if (!graph_contains_vertex(drm_graph, drm)) {
-        graph_add_vertex(drm_graph, drm);
-    }
     if (drm_graph == NULL) {
         drm_graph = shallow_graph_create();
+    }
+    if (!graph_contains_vertex(drm_graph, drm)) {
+        graph_add_vertex(drm_graph, drm);
     }
     pthread_mutex_unlock(&m);
     return drm;
@@ -66,8 +66,6 @@ bool is_cycle(graph* g, drm_t* start, set* visited) {
     set_remove(visited, start);
 
     return false;
-
-
 }
 
 int drm_wait(drm_t *drm, pthread_t *thread_id) {
@@ -100,9 +98,13 @@ int drm_wait(drm_t *drm, pthread_t *thread_id) {
     }
 
     //no cycle 
-    graph_remove_edge(drm_graph, thread_id, drm);
-    graph_add_edge(drm_graph, drm, thread_id);
-    pthread_mutex_lock(&(drm->mutex));
+    //check if the resource is used by others
+    vector* drm_to = graph_neighbors(drm_graph, drm);
+    if (vector_empty(drm_to)) {
+        graph_remove_edge(drm_graph, thread_id, drm);
+        graph_add_edge(drm_graph, drm, thread_id);
+        pthread_mutex_lock(&(drm->mutex));
+    }
     pthread_mutex_unlock(&m);
     return 1;
 }
