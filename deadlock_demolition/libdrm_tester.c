@@ -14,6 +14,7 @@ int main() {
     drm_t *drm = drm_init();
     // TODO your tests here
     drm_destroy(drm);
+    //drm = drm_init();
 
     return 0;
 }

@@ -7,24 +7,112 @@
 #include "set.h"
 #include <pthread.h>
 
-struct drm_t {};
+struct drm_t {
+    pthread_mutex_t mutex;
+};
+
+pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+graph* drm_graph;
+
+
 
 drm_t *drm_init() {
-    /* Your code here */
-    return NULL;
+    drm_t* drm = malloc(sizeof(drm_t));
+    pthread_mutex_init(&(drm->mutex), NULL);
+    pthread_mutex_lock(&m);
+    if (!graph_contains_vertex(drm_graph, drm)) {
+        graph_add_vertex(drm_graph, drm);
+    }
+    if (drm_graph == NULL) {
+        drm_graph = shallow_graph_create();
+    }
+    pthread_mutex_unlock(&m);
+    return drm;
 }
 
 int drm_post(drm_t *drm, pthread_t *thread_id) {
-    /* Your code here */
+    pthread_mutex_lock(&m);
+    if (drm != NULL && thread_id != NULL) {
+        if (!graph_contains_vertex(drm_graph, drm) || !graph_contains_vertex(drm_graph, thread_id)) {
+            return 0;
+        }
+        // see if an edge from the drm to the thread exists;
+        vector* to_thread = graph_antineighbors(drm_graph, thread_id);
+        for (size_t i = 0; i < vector_size(to_thread); i++) { //may improve
+            if ((drm_t*)vector_get(to_thread, i) == drm) {
+                graph_remove_edge(drm_graph, drm, thread_id);
+                pthread_mutex_unlock(&(drm->mutex));
+                return 1;
+            }
+        }
+    }
+    pthread_mutex_unlock(&m);
     return 0;
+}
+
+bool is_cycle(graph* g, drm_t* start, set* visited) {
+    if (set_contains(visited, start)) {
+        return true;
+    }
+    set_add(visited, start);
+    vector* vertex_to = graph_neighbors(g, start);
+    for (size_t i = 0; i < vector_size(vertex_to); i++) {
+        void* next = vector_get(vertex_to, i);
+        if (is_cycle(g, next, visited)) {
+            return true;
+        }
+    }
+
+    set_remove(visited, start);
+
+    return false;
+
+
 }
 
 int drm_wait(drm_t *drm, pthread_t *thread_id) {
-    /* Your code here */
-    return 0;
+    //add thread to the graph
+    pthread_mutex_lock(&m);
+    if (!graph_contains_vertex(drm_graph, thread_id)) {
+        graph_add_vertex(drm_graph, thread_id);
+        //graph_set_vertex_value(drm_graph, thread_id, "thread");
+    }
+    
+    //check deadlock
+    //1st case a thread trying to lock a mutex it already owns.
+    vector* to_thread = graph_antineighbors(drm_graph, thread_id);
+    for (size_t i = 0; i < vector_size(to_thread); i++) {
+        if ((drm_t*)vector_get(to_thread, i) == drm) {
+            pthread_mutex_unlock(&m);
+            return 0;
+        }
+    }
+
+    //Add the appropriate edge to the Resource Allocation Graph. (requesting)
+    graph_add_edge(drm_graph, thread_id, drm);
+
+    //2nd case if the newly added edge creates a cycle in the Resource Allocation Graph.
+    set* visited = shallow_set_create();
+    if (is_cycle(drm_graph, drm, visited)) {
+        graph_remove_edge(drm_graph, thread_id, drm);
+        pthread_mutex_unlock(&m);
+        return 0;
+    }
+
+    //no cycle 
+    graph_remove_edge(drm_graph, thread_id, drm);
+    graph_add_edge(drm_graph, drm, thread_id);
+    pthread_mutex_lock(&(drm->mutex));
+    pthread_mutex_unlock(&m);
+    return 1;
 }
+
 
 void drm_destroy(drm_t *drm) {
     /* Your code here */
+    graph_remove_vertex(drm_graph, drm);
+    pthread_mutex_destroy(&(drm->mutex));
+    pthread_mutex_destroy(&m);
+    free(drm);
     return;
 }
