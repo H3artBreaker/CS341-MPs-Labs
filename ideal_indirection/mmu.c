@@ -2,7 +2,7 @@
  * ideal_indirection
  * CS 341 - Spring 2024
  */
- //collaborate with yihangj3
+ //collaborate with yihangj3   
 #include "mmu.h"
 #include <assert.h>
 #include <dirent.h>
@@ -161,9 +161,11 @@ void mmu_write_to_virtual_address(mmu *this, addr32 virtual_address, size_t pid,
 
 
     //Mark the PTE as accessed.
+    void * addr_in_phy = get_system_pointer_from_address((pte->base_addr << 12) | (virtual_address & 0xFFF));
+    memcpy(addr_in_phy, buffer, num_bytes);
     pte->accessed = 1;
     pte->dirty = 1;
-    memcpy((void *)get_system_pointer_from_pte(pte) + (virtual_address & 0xFFF), buffer, num_bytes);
+
 }
 
 
