@@ -31,26 +31,25 @@ void mmu_read_from_virtual_address(mmu *this, addr32 virtual_address,
 
     // Make sure that the address is in one of the segmentations. If not, raise a segfault and return
     if (address_in_segmentations(this->segmentations[pid], virtual_address) == false) {
-        mmu_raise_page_fault(this);
+        mmu_raise_segmentation_fault(this);
         return;
     }
 
     //Check the TLB for the page table entry
-    //addr32 pte = virtual_address & 0xFFFFF000; 
     page_table_entry* pte = tlb_get_pte(&this->tlb, virtual_address & 0xFFFFF000);
     if (pte == NULL) {
-        mmu_tlb_miss(this); //Raise a page fault
+        mmu_tlb_miss(this); //Raise a TLB miss
 
         //Get the page directory entry.
         page_directory* pd = this->page_directories[pid];
-        addr32 base_addr_in_virtual = virtual_address >> (NUM_OFFSET_BITS + NUM_VPN_BITS); //the top 10 bits 
-        page_directory_entry pde = (pd->entries)[base_addr_in_virtual];
+        addr32 idx1_in_pd = virtual_address >> (NUM_OFFSET_BITS + NUM_VPN_BITS); //the top 10 bits 
+        page_directory_entry pde = (pd->entries)[idx1_in_pd];
         if (pde.present == 0) {
             mmu_raise_page_fault(this); //Raise a page fault
             addr32 new_frame = ask_kernel_for_frame(NULL); //Ask the kernel for a frame
-            // if (new_frame == 0) {
-            //     return;
-            // }
+            if (new_frame == 0) {
+                return;
+            }
             pde.base_addr = new_frame >> NUM_OFFSET_BITS;
             //Update the page directory entry’s present, read_write, and user_supervisor flags
             pde.present = 1;
@@ -62,19 +61,20 @@ void mmu_read_from_virtual_address(mmu *this, addr32 virtual_address,
         page_table* pt = (page_table*)get_system_pointer_from_pde(&pde);
 
         //Get the page table entry from the page table. Add the entry to the TLB
-        addr32 v = (virtual_address >> NUM_OFFSET_BITS) & 0x3FF; //middle 10 bits
-        pte = &(pt->entries[v]);
+
+        addr32 idx2_in_pt = (virtual_address >> NUM_OFFSET_BITS) & 0x3FF; //middle 10 bits
+        pte = &(pt->entries[idx2_in_pt]);
         tlb_add_pte(&(this->tlb), virtual_address & 0xFFFFF000, pte);
     } 
 
     //If the page table entry is not present in memory:
     if (!pte->present) {
-            mmu_raise_page_fault(this); //Raise a page fault
-            pte->base_addr = (ask_kernel_for_frame(pte) >> NUM_OFFSET_BITS);
-            pte->present = 1;
-            pte->read_write = 1;
-            pte->user_supervisor = 1;
-            read_page_from_disk((page_table_entry*)pte);
+        mmu_raise_page_fault(this); //Raise a page fault
+        pte->base_addr = (ask_kernel_for_frame(pte) >> NUM_OFFSET_BITS);
+        pte->present = 1;
+        pte->read_write = 1;
+        pte->user_supervisor = 1;
+        read_page_from_disk((page_table_entry*)pte);
     }
 
 
@@ -88,7 +88,7 @@ void mmu_read_from_virtual_address(mmu *this, addr32 virtual_address,
 
     //Mark the PTE as accessed.
     pte->accessed = 1;
-    memcpy(buffer, (void *)get_system_pointer_from_pte(pte) + (virtual_address & 0xFFF), num_bytes);
+    memcpy(buffer, (void *)get_system_pointer_from_pte(pte) + (virtual_address & 0xFFF), num_bytes); //get_system_pointer_from_pte(pte) gives the base address of the frame we want in physical memory address (the top 20 bits restricted by the bit field), and the next argument is the offset which gives the last 10 bits.
 }
 
 void mmu_write_to_virtual_address(mmu *this, addr32 virtual_address, size_t pid,
@@ -117,8 +117,8 @@ void mmu_write_to_virtual_address(mmu *this, addr32 virtual_address, size_t pid,
 
         //Get the page directory entry.
         page_directory* pd = this->page_directories[pid];
-        addr32 base_addr_in_virtual = virtual_address >> (NUM_OFFSET_BITS + NUM_VPN_BITS); //the top 10 bits 
-        page_directory_entry pde = (pd->entries)[base_addr_in_virtual];
+        addr32 idx1_in_pd = virtual_address >> (NUM_OFFSET_BITS + NUM_VPN_BITS); //the top 10 bits 
+        page_directory_entry pde = (pd->entries)[idx1_in_pd];
         if (pde.present == 0) {
             mmu_raise_page_fault(this); //Raise a page fault
             addr32 new_frame = ask_kernel_for_frame(NULL); //Ask the kernel for a frame
@@ -167,6 +167,8 @@ void mmu_write_to_virtual_address(mmu *this, addr32 virtual_address, size_t pid,
     pte->dirty = 1;
 
 }
+
+
 
 void mmu_tlb_miss(mmu *this) {
     this->num_tlb_misses++;
