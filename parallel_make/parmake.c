@@ -10,5 +10,6 @@
 
 int parmake(char *makefile, size_t num_threads, char **targets) {
     // good luck!
+    //graph* rag = parser_parse_makefile(makefile, targets);
     return 0;
 }
