@@ -2,3 +2,17 @@
 
 a:
 	echo A
+
+
+
+	#basic
+# all: a b
+
+# a:
+# 	echo A
+# 	cat ghjk
+
+
+# b: 
+# 	echo B
+
