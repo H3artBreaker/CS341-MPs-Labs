@@ -5,7 +5,7 @@ a:
 
 
 
-	#basic
+# 	basic
 # all: a b
 
 # a:
@@ -15,4 +15,5 @@ a:
 
 # b: 
 # 	echo B
+
 

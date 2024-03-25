@@ -50,7 +50,8 @@ int run_deps_cmds(graph* rag, rule_t* rule, vector* deps) {
     if (vector_size(deps) == 0) {
         //check if the rule's name is on the disk 
         struct stat buffer;
-        if (stat(rule->target, &buffer) != 0) {
+        //printf("rule's on disk? is %u \n", stat(rule->target, &buffer));
+        if (stat(rule->target, &buffer) != 0) { //not on disk
             if (rule->state == 0) {
                 bool cmd_status = run_cmds(rule);
                 //mark the rule as satisfied  satisfied->1 failed->-1
@@ -60,26 +61,27 @@ int run_deps_cmds(graph* rag, rule_t* rule, vector* deps) {
                     rule->state = -1;
                     result = 0;
                 }
-            }
-            
-        } 
+            }  
+        } else { //on the disk
+            rule->state = 1; // not sure if it is necessary
+            result = 2;
+        }
+        
         return result;
     }
 
 
     int dep_on_not_disk = 0;
-    vector* comp_time = shallow_vector_create();
+    //vector* comp_time = shallow_vector_create();
     for (size_t i = 0; i < vector_size(deps); i++) {
         char* subRule_str = vector_get(deps, i);
         //printf("the subRule is %s\n", subRule_str);
         rule_t* subRule = graph_get_vertex_value(rag, subRule_str);
         vector* sub_deps = graph_neighbors(rag, subRule_str);
-        int temp = run_deps_cmds(rag, subRule, sub_deps);
+        int temp = run_deps_cmds(rag, subRule, sub_deps); // == 1 -> on disk and executes cmd successfully
 
-        if (temp == 1) { 
+        if (temp == 1) {
             dep_on_not_disk = 1;
-        } else {
-            vector_push_back(comp_time, subRule);
         }
 
         result = (result == 1) ? temp : result; //if already failed before, we should not change the result 
@@ -88,10 +90,10 @@ int run_deps_cmds(graph* rag, rule_t* rule, vector* deps) {
 
     struct stat buffer2;
 
-    if (result != 1) { //meaning a dependecy rule failed
+    if (result == 0) { //meaning a dependecy rule failed
         rule->state = -1;
         result = 0;
-    } else if (stat(rule->target, &buffer2) != 0 || dep_on_not_disk == 1) {
+    } else if (stat(rule->target, &buffer2) != 0 || dep_on_not_disk == 1) { //check if the rule is on the disk 
         if (rule->state == 0) {
             bool cmd_status = run_cmds(rule);
             if (cmd_status == true) {
@@ -101,16 +103,18 @@ int run_deps_cmds(graph* rag, rule_t* rule, vector* deps) {
                 result = 0;
             }
         }
-    } else {
+    } else if (vector_size(deps) != 0) {
         struct stat ori;
         if (stat(rule->target, &ori) != 0) {
             perror("Failed to get stats for file1");
             return -1; // Error occurred
         }
-        for (size_t k = 0; k < vector_size(comp_time); k++) {
+        for (size_t k = 0; k < vector_size(deps); k++) {
             struct stat cmp;
-            rule_t* elem = vector_get(comp_time, k);
-            if (stat(elem->target, &cmp) != 0) {
+            char* elem = vector_get(deps, k);
+            printf(" elem is %s \n", elem);
+            if (stat(elem, &cmp) != 0) {
+                //printf(" target is %s \n", rule->target);
                 perror("Failed to get stats for file1");
                 return -1; // Error occurred
             }
@@ -124,12 +128,13 @@ int run_deps_cmds(graph* rag, rule_t* rule, vector* deps) {
                     rule->state = -1;
                     result = 0;
                 }
+                
                 break;
             }
         }
     }
 
-    vector_destroy(comp_time);
+    //vector_destroy(comp_time);
     
     
     return result;
