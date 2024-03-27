@@ -93,16 +93,7 @@ int main(int argc, char **argv) {
         close(mpr_fds[i][0]);  //the whole program is not going to use mapper pipeline write end anymore
     }
 
-    // Wait for the mappers to finish.
-    for (int i = 0; i < mapper_count; i++) {     
-        int status;
-        waitpid(children_pid_s[i], &status, 0);
-    }
-    for (int i = 0; i < mapper_count; i++) {
-        int status;
-        waitpid(children_pid_m[i], &status, 0);
-    }   
-
+    
 
     // Start the reducer process.
     close(rdcr_fd[1]); // the whole program is not gonna use the write end of the pipeline for the reducer anymore
@@ -125,6 +116,17 @@ int main(int argc, char **argv) {
                                                     //should I put above two functions before reducer? because reducer complete all at the same time or reducer is actually take one by one 
 
     // Wait for the reducer to finish.
+
+    // Wait for the mappers to finish.
+    for (int i = 0; i < mapper_count; i++) {     
+        int status;
+        waitpid(children_pid_s[i], &status, 0);
+    }
+    for (int i = 0; i < mapper_count; i++) {
+        int status;
+        waitpid(children_pid_m[i], &status, 0);
+    }   
+
     int status;
     waitpid(rdcr_pid, &status, 0);
     // Print nonzero subprocess exit codes.
