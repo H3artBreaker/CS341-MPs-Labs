@@ -5,20 +5,23 @@
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+
 
 int main(int argc, char **argv) {
-    // if (argc != 6) {
-    //     printf("INCORRECT ARGUMENTS");
-    //     exit(1);
-    // }
-    char* input_file = argv[1];
+    if (argc != 6) {
+        printf("INCORRECT ARGUMENTS");
+        exit(1);
+    }
+    //char* input_file = argv[1];
     char* output_file = argv[2];
-    char* mapper = argv[3];
-    char* reducer = argv[4];
+    //char* mapper = argv[3];
+    //char* reducer = argv[4];
     char* mapper_count_str = argv[5];
     int mapper_count = atoi(mapper_count_str);
     // Create an input pipe for EACH mapper.
-    int[] mpr_fds[mapper_count]; 
+    int* mpr_fds[mapper_count]; 
     for (int i = 0; i < mapper_count; i++) {
         mpr_fds[i] = calloc(2, sizeof(int));
         if (pipe(mpr_fds[i]) < 0) {
@@ -49,7 +52,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < mapper_count; i++) {
         children_pids[i] = fork();
-        if (children_pids)
+        
     }
     pid_t pid = fork();
     if (pid < 0) {
@@ -76,8 +79,6 @@ int main(int argc, char **argv) {
     for (int i = 0; i < mapper_count; i++) {
       free(mpr_fds[i]);
     }
-
-    mpr_fds = NULL;
 
     return 0;
 }
