@@ -29,7 +29,12 @@ void close_program(int signal);
  * Called by close_program upon SIGINT.
  */
 void close_server_connection() {
-    // Your code here
+    if (shutdown(serverSocket, SHUT_RDWR) != 0) {
+        perror("Shutdown problem");
+    }
+    if (close(serverSocket) != 0) {
+        perror("Close problem");
+    }
 }
 
 /**
@@ -42,17 +47,29 @@ void close_server_connection() {
  * Returns integer of valid file descriptor, or exit(1) on failure.
  */
 int connect_to_server(const char *host, const char *port) {
-    /*QUESTION 1*/
-    /*QUESTION 2*/
-    /*QUESTION 3*/
+    struct addrinfo hints, *result;
+    memset (&hints, 0, sizeof (struct addrinfo)); // used to clear 
 
-    /*QUESTION 4*/
-    /*QUESTION 5*/
+    hints.ai_family = AF_INET; //IPv4
+    hints.ai_socktype = SOCK_STREAM; //TCP
+    
+    int s = getaddrinfo (host, port, &hints, &result);
+    if (s != 0) {
+        fprintf (stderr, "getaddrinfo: %s\n", gai_strerror (s));
+        exit (1);
+    }
 
-    /*QUESTION 6*/
+    int sock_fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
 
-    /*QUESTION 7*/
-    return -1;
+    int ok = connect(sock_fd, result->ai_addr, result->ai_addrlen);
+    if( ok == -1) {
+        perror("connect has error");
+        exit(1);
+    }
+    puts("Connected!");
+    freeaddrinfo(result);
+    
+    return sock_fd;
 }
 
 typedef struct _thread_cancel_args {

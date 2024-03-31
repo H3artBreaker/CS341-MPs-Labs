@@ -1,31 +1,74 @@
 1) What is a socket?
+-	acts as a communication endpoint for sending and receiving data over a network.
 
 
 2) What is the difference between the domains AF_INET and AF_UNIX?
+a. AF_INET is used for process communication over a network(diffrent machines), while AF_UNIX is for local communication(on a same machine).
+b. AF_INET uses IP addresses and port numbers for addressing, while AF_UNIX uses filesystem paths. AF_UNIX facilitates 
+inter-process communication (IPC) without the need to use network protocols, making it more efficient for local messaging..
+
 
 
 3) What is the difference between SOCK_STREAM and SOCK_DGRAM?
+-   SOCK_STREAM is used for TCP. SOCK_DGRAM is used for UDP.
 
 
 4) Why is it important to clear all the values the addrinfo struct before using it in getaddrinfo?
+-   It ensures that the structure is in a predicatable state, which helps avoid any unpredecatable behaviors/errors when we are using the getaddrinfo function.
 
 
 5) What are ai_family and ai_socktype?
+-   ai_family: it specifices the address family, like IPv4 or IPv6, that socket can communicate with. 
+-   ai_socktype: it specifies the preferred socket type, which determines the semantics of communication over the socket. 
+Different socket types are used for different types of communication, such as stream-oriented (TCP) versus datagram-oriented (UDP).
+
 
 
 6) What does getaddrinfo do?
+-   Name Resolution: Converts human-readable hostnames to IP addresses. (In its first argument);
+-   Service Translation: Translates service names (like "http") to port numbers.
+-   Socket Configuration: Provides information for configuring sockets, including address family and socket type.
+
 
 
 7) What does connect do?
+-   it is used to connect the socket in the client side with the server
+-   it primarily utilized with TCP, it initiates a three-way handshake to form a reliable, ordered, and error-checked connection, enabling data exchange.
 
 
 8) What is setsockopt?
+-   The `setsockopt()` function configures socket behavior by setting options at the socket or protocol level,
+such as adjusting buffer sizes, modifying timeouts, and managing protocol-specific features like TCP_NODELAY. 
+It's used after socket creation to optimize network communication for specific application needs, enhancing 
+performance, reliability, and functionality of socket operations.
 
 
 9) What does bind do?
-
+-   we use bind() to bind the socket we created in the server side, with a local address, including an IP address and a port number.
+This association is essential for server applications that need to establish a well-known endpoint for clients to connect to. 
 
 10) What does listen do?
+-   it prepares it to accept incoming connections, transforming it into a listening socket that waits for client connections.
 
 
 11) What does accept do?
+-   it allows a server to accept incoming client connection requests on a listening socket. 
+It blocks execution until a client connection attempt arrives, then extracts this request from the queue of pending connections. 
+
+
+
+--------------------------------------------------------
+In the client side, we first use getaddrinfo() to get the server address info we want. 
+Then we create the socket with the specified address family and protocal in our end. 
+Then, by using connect(), we connect the socket with the server.
+
+
+
+In the server side, we first create a socket for the endpoint in the server side later. 
+Then, we use get the ip address and port information using getaddrinfo(). 
+Then, we bind the socket with that address for endpoint in the serverside for communication with client later.
+Afterwards, we listen on that socket for incoming connection request from the client. Then, we accept it.
+
+
+Connect() is kinda building a pipe between client and server as we can use write() (for sending the data) and read() (for receiving the data);
+

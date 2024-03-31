@@ -4,6 +4,7 @@
  */
 
 #pragma once
+#include <unistd.h>
 
 /**
  * The largest size the message can be that a client

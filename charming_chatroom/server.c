@@ -75,19 +75,31 @@ void cleanup() {
  *    - perror() for any other call
  */
 void run_server(char *port) {
-    /*QUESTION 1*/
-    /*QUESTION 2*/
-    /*QUESTION 3*/
+    struct addrinfo hints, *result;
+    memset (&hints, 0, sizeof (struct addrinfo)); // used to clear 
 
-    /*QUESTION 8*/
+    hints.ai_family = AF_INET; //IPv4
+    hints.ai_socktype = SOCK_STREAM; //TCP
+    hints.ai_flags = AI_PASSIVE; // << We want Server socket
 
-    /*QUESTION 4*/
-    /*QUESTION 5*/
-    /*QUESTION 6*/
+    int s = getaddrinfo(NULL, port, &hints, &result);
+    if (s != 0) {
+        fprintf (stderr, "getaddrinfo: %s\n", gai_strerror (s));
+        exit (1);
+    }
 
-    /*QUESTION 9*/
+    int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    
+    if (bind(sock_fd, result->ai_addr, result->ai_addrlen) != 0 ) {
+        perror("Bind error");
+        exit(1);
+    }
 
-    /*QUESTION 10*/
+    if (listen(sock_fd, MAX_CLIENTS)) {
+        perror("Listen error");
+        shutdown(sock_fd, SHUT_RDWR);
+        exit(1);
+    }
 
     /*QUESTION 11*/
 }

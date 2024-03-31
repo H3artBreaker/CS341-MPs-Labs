@@ -32,15 +32,42 @@ ssize_t get_message_size(int socket) {
 // You may assume size won't be larger than a 4 byte integer
 ssize_t write_message_size(size_t size, int socket) {
     // Your code here
-    return 9001;
+    return 0;
 }
 
 ssize_t read_all_from_socket(int socket, char *buffer, size_t count) {
     // Your Code Here
-    return 9001;
+    size_t total_read = 0;
+    ssize_t byte_read = 0;
+    while (total_read < count) {
+        byte_read = read(socket, buffer + total_read, count - total_read);
+        if (byte_read == -1) {
+            //error detected
+            perror("write error");
+            return -1;   
+        } else if (byte_read == 0) {
+            //socket disconnected
+            return 0;
+        } 
+        total_read += byte_read;
+    }
+    return (ssize_t)total_read;
 }
 
 ssize_t write_all_to_socket(int socket, const char *buffer, size_t count) {
-    // Your Code Here
-    return 9001;
+    size_t total_written = 0;
+    ssize_t byte_written = 0;
+    while (total_written < count) {
+        byte_written = write(socket, buffer + total_written, count - total_written);
+        if (byte_written == -1) {
+            //error detected
+            perror("write error");
+            return -1;   
+        } else if (byte_written == 0) {
+            //socket disconnected
+            return 0;
+        } 
+        total_written += byte_written;
+    }
+    return (ssize_t)total_written;
 }
