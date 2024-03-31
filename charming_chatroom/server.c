@@ -89,9 +89,31 @@ void run_server(char *port) {
     }
 
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-    
+    if (sock_fd < 0) {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+    int enable = 1;
+
+    // Set SO_REUSEADDR
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+        perror("setsockopt(SO_REUSEADDR) failed");
+        close(sock_fd);
+        exit(1);
+    }
+
+    // Set SO_REUSEPORT
+    #ifdef SO_REUSEPORT
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(int)) < 0) {
+        perror("setsockopt(SO_REUSEPORT) failed");
+        close(sock_fd);
+        exit(1);
+    }
+    #endif
+
     if (bind(sock_fd, result->ai_addr, result->ai_addrlen) != 0 ) {
         perror("Bind error");
+        close(sock_fd);
         exit(1);
     }
 
@@ -101,6 +123,8 @@ void run_server(char *port) {
         exit(1);
     }
 
+    struct sockaddr_in * result_addr = (struct sockaddr_in*) result->ai_addr;
+    printf("Listening on file descriptor %d, port %d\n", sock_fd, ntohs(result_addr->sin_port));
     /*QUESTION 11*/
 }
 

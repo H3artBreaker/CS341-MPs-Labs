@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+
 
 #include "utils.h"
 static const size_t MESSAGE_SIZE_DIGITS = 4;
@@ -32,7 +34,8 @@ ssize_t get_message_size(int socket) {
 // You may assume size won't be larger than a 4 byte integer
 ssize_t write_message_size(size_t size, int socket) {
     // Your code here
-    return 0;
+    int32_t n = htonl(size); //int32_t is to ensure the data is in 32 bits over the network
+    return write_all_to_socket(socket, (char *)&n, MESSAGE_SIZE_DIGITS); //change to char* for easier transfering data byte by byte later
 }
 
 ssize_t read_all_from_socket(int socket, char *buffer, size_t count) {
@@ -41,14 +44,16 @@ ssize_t read_all_from_socket(int socket, char *buffer, size_t count) {
     ssize_t byte_read = 0;
     while (total_read < count) {
         byte_read = read(socket, buffer + total_read, count - total_read);
-        if (byte_read == -1) {
+        if (byte_read == -1 && errno != EINTR) {
             //error detected
             perror("write error");
             return -1;   
         } else if (byte_read == 0) {
             //socket disconnected
             return 0;
-        } 
+        } else {
+            break;
+        }
         total_read += byte_read;
     }
     return (ssize_t)total_read;
@@ -59,14 +64,16 @@ ssize_t write_all_to_socket(int socket, const char *buffer, size_t count) {
     ssize_t byte_written = 0;
     while (total_written < count) {
         byte_written = write(socket, buffer + total_written, count - total_written);
-        if (byte_written == -1) {
+        if (byte_written == -1 && errno != EINTR) {
             //error detected
             perror("write error");
             return -1;   
         } else if (byte_written == 0) {
             //socket disconnected
             return 0;
-        } 
+        } else {
+            break;
+        }
         total_written += byte_written;
     }
     return (ssize_t)total_written;

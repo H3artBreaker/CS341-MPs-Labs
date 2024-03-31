@@ -64,6 +64,7 @@ int connect_to_server(const char *host, const char *port) {
     int ok = connect(sock_fd, result->ai_addr, result->ai_addrlen);
     if( ok == -1) {
         perror("connect has error");
+        close(sock_fd);
         exit(1);
     }
     puts("Connected!");
