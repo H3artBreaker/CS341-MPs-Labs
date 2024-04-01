@@ -5,15 +5,21 @@ a:
 
 
 
-# 	basic
-# all: a b
+# # Main build rule
+# build: libA libB
+# 	echo "Building the project..."
 
-# a:
-# 	echo A
-# 	cat ghjk
+# # Main test rule
+# test: libA libB testData
+# 	echo "Running tests..."
 
+# # Dependency rules
+# libA:
+# 	echo "Compiling libA..."
 
-# b: 
-# 	echo B
+# libB:
+# 	echo "Compiling libB..."
 
+# testData:
+# 	echo "Preparing test data..."
 

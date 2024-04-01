@@ -5,6 +5,7 @@
 
 #include "format.h"
 #include "graph.h"
+#include "queue.h"
 #include "parmake.h"
 #include "parser.h"
 #include <sys/stat.h>
@@ -12,162 +13,212 @@
 #include <stdbool.h>
 #include "set.h"
 #include <time.h>
+#include <pthread.h>
+
+graph* rag;
+//queue* q;
+vector* topo_vec;
+set* topo_set;
+pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
 bool cycle_detection(graph* rag, rule_t* vertex, set* visiting, set* visited);
 
-bool run_cmds(rule_t* rule) {
+int run_cmds(rule_t* rule) {
+    // int success = 1;
+    // VECTOR_FOR_EACH(rule->commands, cmd, {
+    //     int sys_status = system(cmd);
+    //     if (sys_status != 0 || (WIFEXITED(sys_status) && WEXITSTATUS(sys_status))) {   //why this does not work
+    //         success = -1;
+    //         break;
+    //     }
+    // });
+    // return success;
     int success = 1;
     for (size_t j = 0; j < vector_size(rule->commands); j++) {
         char* cmd = (char*)vector_get(rule->commands, j);
         int sys_status = system(cmd);
         if (sys_status == -1) {
-            success = 0;
+            success = -1;
             break;
         } else {
             if (WIFEXITED(sys_status)) {
                 int exit_status = WEXITSTATUS(sys_status);
                 if (exit_status != 0) {
-                    success = 0;
+                    //printf("FAILED\n");
+                    success = -1;
                     break;
                 }
             }
         }
     }
-    if (success == 1) {
-        return true;
-    }
-    return false;
+    return success;
 }
 
-/*
-1 - satisfied
-0 - failed
-*/
 
-int run_deps_cmds(graph* rag, rule_t* rule, vector* deps) {
-    int result = 1;
-    struct stat buffer;
-    if (vector_size(deps) == 0) {
-        //check if the rule's name is on the disk 
-        if (stat(rule->target, &buffer) != 0) { //not on disk
-            if (rule->state == 0) { 
-                bool cmd_status = run_cmds(rule);
-                //mark the rule as satisfied  satisfied->1 failed->-1
-                if (cmd_status == 1) {
-                    rule->state = 1;
-                } else {
-                    rule->state = -1;
-                    result = 0;
-                }
-            }  
-        } else { //on the disk
-            rule->state = 1; // not sure if it is necessary
-            result = 2;
-        }
-        
-        return result;
+
+void q_push_topoSort(char* target) {
+    //printf("The target is %s \n", target);
+    if (set_contains(topo_set, target)) {
+        return;
     }
-
-
-    int dep_on_not_disk = 0;
+    set_add(topo_set, target);
+    vector* deps = graph_neighbors(rag, target);
+    //using dfs to push the leaf dependency rule into the queue in topological sort order
     for (size_t i = 0; i < vector_size(deps); i++) {
-        char* subRule_str = vector_get(deps, i);
-        rule_t* subRule = graph_get_vertex_value(rag, subRule_str);
-        vector* sub_deps = graph_neighbors(rag, subRule_str);
-        int temp = run_deps_cmds(rag, subRule, sub_deps); // == 1 -> on disk and executes cmd successfully
-
-        if (temp == 1) {
-            dep_on_not_disk = 1;
-        }
-
-        result = (result == 1) ? temp : result; //if already failed before, we should not change the result 
-        vector_destroy(sub_deps);
+        char* subTarget_str = (char*)vector_get(deps, i);
+        q_push_topoSort(subTarget_str);
     }
 
-    if (result == 0) { //meaning a dependecy rule failed
-        rule->state = -1;
-        result = 0;
-    } else if (stat(rule->target, &buffer) != 0 || dep_on_not_disk == 1) { //check if the rule is on the disk 
-        if (rule->state == 0) {
-            bool cmd_status = run_cmds(rule);
-            if (cmd_status == true) {
-                rule->state = 1;
-            } else {
-                rule->state = -1;
-                result = 0;
-            }
+    if (vector_size(deps) == 0) {
+        //queue_push(q, target);
+        //vector_push_back(vec, target);
+        vector_insert(topo_vec, 0, target);
+    }
+
+    rule_t *rule = (rule_t *)graph_get_vertex_value(rag, target);
+    rule->state = vector_size(deps);
+
+    vector_destroy(deps);
+}
+
+void* run_deps_cmds(void* arg) {
+    while (1) {
+        //pthread_t tid = pthread_self();
+        //printf("Thread ID: %lu\n", (unsigned long)tid);
+        pthread_mutex_lock(&m);
+        //char* target = (char*)queue_pull(q);
+        char* target = (vector_empty(topo_vec)) ? NULL : *((char**)vector_back(topo_vec));
+        
+        //printf("The target is %s in thread id %lu\n", target, (unsigned long)tid);
+        if (!target) {
+            //printf("Thread ID break: %lu\n", (unsigned long)tid);
+            pthread_mutex_unlock(&m);
+            break;
+        } else {
+            vector_pop_back(topo_vec);
         }
-    } else if (vector_size(deps) != 0) {
-        struct stat ori;
-        if (stat(rule->target, &ori) != 0) {
-            perror("Failed to get stats for file1");
-            return -1; // Error occurred
-        }
-        for (size_t k = 0; k < vector_size(deps); k++) {
-            struct stat cmp;
-            char* elem = vector_get(deps, k);
-            if (stat(elem, &cmp) != 0) {
-                perror("Failed to get stats for file1");
-                return -1; // Error occurred
-            }
-            double diff = difftime(cmp.st_mtime, ori.st_mtime);
-            if (diff > 0) { //cmp is newer 
-                //run cmd
-                bool cmd_status = run_cmds(rule);
-                if (cmd_status == 1) {
-                    rule->state = 1;
-                } else {
-                    rule->state = -1;
-                    result = 0;
+        pthread_mutex_unlock(&m);
+
+        pthread_mutex_lock(&m);
+        rule_t *rule = (rule_t *) graph_get_vertex_value(rag, target);
+        pthread_mutex_unlock(&m);
+
+        //check if it is on the disk 
+        struct stat argStat;
+        int stat_runCmd = 0;
+
+        pthread_mutex_lock(&m);
+        vector* deps = graph_neighbors(rag, target);
+        pthread_mutex_unlock(&m);
+
+        if (stat(rule->target, &argStat) != 0) { //not on disk //0 means on disk, 1 means not on the disk
+            stat_runCmd = 1;
+        } else {
+            for (size_t i = 0; i < vector_size(deps); i++) {//if it has dependency
+                //printf("HAS DEPENDENCY\n");
+                char* subTarget_str = (char*)vector_get(deps, i);
+                pthread_mutex_lock(&m);
+                rule_t* subRule = (rule_t*)graph_get_vertex_value(rag, subTarget_str);
+                pthread_mutex_unlock(&m);
+                struct stat subStat;
+                //check if itself is on the disk or if its dependency has newer modification (st_mtime is the last access time in number of seconds and nanoseconds since the epoch. st_mtime)
+                if (stat(subRule->target, &subStat) != 0 || (difftime(subStat.st_mtime, argStat.st_mtime) > 0)) {
+                    stat_runCmd = 1;
+                    break;
                 }
-                
-                break;
             }
         }
+        //printf("THE target %s STAT RUN CMD IS %u \n", rule->target, stat_runCmd );
+        if (stat_runCmd == 1) {
+            //printf("RUNNING CMDS\n");
+            if (rule->state == 0) {
+                //printf("The target is %s \n", target);
+                rule->state = run_cmds(rule); // 1 -> satisfied; -1 -> failed
+            }
+        }
+
+        //check if we need to add its parent in (the node that depends on the current target)
+        //printf("THE target %s state IS %u \n", rule->target, rule->state);
+        if (rule->state != -1) {
+            //printf("READ TO GET PARENTS\n");
+            pthread_mutex_lock(&m);
+            vector *parents = graph_antineighbors(rag, target);
+            pthread_mutex_unlock(&m);
+
+            VECTOR_FOR_EACH(parents, upRule, {
+                pthread_mutex_lock(&m);
+                rule_t * par = graph_get_vertex_value(rag, upRule);
+                pthread_mutex_unlock(&m);
+                par->state -= 1;
+                if (par->state == 0) {
+                    //queue_push(q, upRule);
+                    vector_insert(topo_vec, 0, upRule);
+                    //printf("PUSHED TO THE VEC\n");
+                }
+            });
+
+            vector_destroy(parents);
+        }
+
+
+        vector_destroy(deps);
+        
     }
-    return result;
+
+    return NULL;
 }
 
 int parmake(char *makefile, size_t num_threads, char **targets) {
     // good luck!
-    graph* rag = parser_parse_makefile(makefile, targets);
-    vector* goal_rules_vertex = graph_neighbors(rag, ""); //all vertexes are the target name in string
+    rag = parser_parse_makefile(makefile, targets);
+    //q = queue_create(-1);
+    vector* gr_vertexes = graph_neighbors(rag, ""); //all vertexes are the target name in string
 
-    //initialize all threads
-    //pthread_t threads[num_threads];
+    if (vector_size(gr_vertexes) == 0) {
+        //queue_destroy(q);
+        graph_destroy(rag);
+        vector_destroy(gr_vertexes);
+        return 0;
+    }
+    topo_vec = shallow_vector_create();
+    topo_set = shallow_set_create();
 
-    for (size_t i = 0; i < vector_size(goal_rules_vertex); i++) {
-        char* target = (char*)vector_get(goal_rules_vertex, i);
+    for (size_t i = 0; i < vector_size(gr_vertexes); i++) {
+        char* target = (char*)vector_get(gr_vertexes, i);
         rule_t * gr = (rule_t *)graph_get_vertex_value(rag, target);
 
         set* visited = shallow_set_create();
         set* visiting = shallow_set_create();
         
         if (cycle_detection(rag, gr, visiting, visited) == 0) {
-            //determine if we need to run the rule's cmds
-            vector* deps = graph_neighbors(rag, target);
-            if (vector_size(deps) >= 1) {
-                run_deps_cmds(rag, gr, deps);
-            } else { 
-                //check if the rule is the name of a file on the disk
-                struct stat buffer;
-                if (stat(gr->target, &buffer) != 0) {
-                    bool cmd_status = run_cmds(gr);
-                    //mark the rule as satisfied  satisfied -> 1; failed -> 0
-                    gr->state = (cmd_status == true) ? 1 : 0;
-                }
-            }
-            vector_destroy(deps);
+            q_push_topoSort(target);
         } else {
             print_cycle_failure(gr->target);
+            gr->state = -1;
         }
-
         set_destroy(visited);
         set_destroy(visiting);
     }
 
-    vector_destroy(goal_rules_vertex);
+    
+
+    //initialize the pthreads
+    pthread_t tids[num_threads];
+
+    for (size_t i = 0; i < num_threads; i++) {
+        pthread_create(tids + i, NULL, run_deps_cmds, NULL);
+    }
+
+    for (size_t i = 0; i < num_threads; i++) {
+        pthread_join(tids[i], NULL);
+    }
+
+    set_destroy(topo_set);
+    //queue_destroy(q);
+    vector_destroy(topo_vec);
+    vector_destroy(gr_vertexes);
     graph_destroy(rag);
+    pthread_mutex_destroy(&m);
     return 0;
 }
 
@@ -213,7 +264,6 @@ bool cycle_detection(graph* rag, rule_t* vertex, set* visiting, set* visited) {
 
     return false;
 }
-
 
 
 
