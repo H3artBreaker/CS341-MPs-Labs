@@ -16,23 +16,15 @@
 #include <pthread.h>
 
 graph* rag;
-//queue* q;
-vector* topo_vec;
+queue* q;
 set* topo_set;
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+size_t thread_num = 1;
+
 
 bool cycle_detection(graph* rag, rule_t* vertex, set* visiting, set* visited);
 
 int run_cmds(rule_t* rule) {
-    // int success = 1;
-    // VECTOR_FOR_EACH(rule->commands, cmd, {
-    //     int sys_status = system(cmd);
-    //     if (sys_status != 0 || (WIFEXITED(sys_status) && WEXITSTATUS(sys_status))) {   //why this does not work
-    //         success = -1;
-    //         break;
-    //     }
-    // });
-    // return success;
     int success = 1;
     for (size_t j = 0; j < vector_size(rule->commands); j++) {
         char* cmd = (char*)vector_get(rule->commands, j);
@@ -57,12 +49,12 @@ int run_cmds(rule_t* rule) {
 
 
 void q_push_topoSort(char* target) {
-    //printf("The target is %s \n", target);
     if (set_contains(topo_set, target)) {
         return;
     }
     set_add(topo_set, target);
     vector* deps = graph_neighbors(rag, target);
+
     //using dfs to push the leaf dependency rule into the queue in topological sort order
     for (size_t i = 0; i < vector_size(deps); i++) {
         char* subTarget_str = (char*)vector_get(deps, i);
@@ -70,9 +62,7 @@ void q_push_topoSort(char* target) {
     }
 
     if (vector_size(deps) == 0) {
-        //queue_push(q, target);
-        //vector_push_back(vec, target);
-        vector_insert(topo_vec, 0, target);
+        queue_push(q, target);
     }
 
     rule_t *rule = (rule_t *)graph_get_vertex_value(rag, target);
@@ -83,21 +73,15 @@ void q_push_topoSort(char* target) {
 
 void* run_deps_cmds(void* arg) {
     while (1) {
-        //pthread_t tid = pthread_self();
-        //printf("Thread ID: %lu\n", (unsigned long)tid);
-        pthread_mutex_lock(&m);
-        //char* target = (char*)queue_pull(q);
-        char* target = (vector_empty(topo_vec)) ? NULL : *((char**)vector_back(topo_vec));
+        pthread_t tid = pthread_self();
+        
+        char* target = (char*)queue_pull(q);
+        printf("The target is %s in thread id %lu\n", target, (unsigned long)tid);
+        if (target == NULL) {
+            break;
+        }
         
         //printf("The target is %s in thread id %lu\n", target, (unsigned long)tid);
-        if (!target) {
-            //printf("Thread ID break: %lu\n", (unsigned long)tid);
-            pthread_mutex_unlock(&m);
-            break;
-        } else {
-            vector_pop_back(topo_vec);
-        }
-        pthread_mutex_unlock(&m);
 
         pthread_mutex_lock(&m);
         rule_t *rule = (rule_t *) graph_get_vertex_value(rag, target);
@@ -115,7 +99,6 @@ void* run_deps_cmds(void* arg) {
             stat_runCmd = 1;
         } else {
             for (size_t i = 0; i < vector_size(deps); i++) {//if it has dependency
-                //printf("HAS DEPENDENCY\n");
                 char* subTarget_str = (char*)vector_get(deps, i);
                 pthread_mutex_lock(&m);
                 rule_t* subRule = (rule_t*)graph_get_vertex_value(rag, subTarget_str);
@@ -130,9 +113,7 @@ void* run_deps_cmds(void* arg) {
         }
         //printf("THE target %s STAT RUN CMD IS %u \n", rule->target, stat_runCmd );
         if (stat_runCmd == 1) {
-            //printf("RUNNING CMDS\n");
             if (rule->state == 0) {
-                //printf("The target is %s \n", target);
                 rule->state = run_cmds(rule); // 1 -> satisfied; -1 -> failed
             }
         }
@@ -140,7 +121,6 @@ void* run_deps_cmds(void* arg) {
         //check if we need to add its parent in (the node that depends on the current target)
         //printf("THE target %s state IS %u \n", rule->target, rule->state);
         if (rule->state != -1) {
-            //printf("READ TO GET PARENTS\n");
             pthread_mutex_lock(&m);
             vector *parents = graph_antineighbors(rag, target);
             pthread_mutex_unlock(&m);
@@ -151,16 +131,13 @@ void* run_deps_cmds(void* arg) {
                 pthread_mutex_unlock(&m);
                 par->state -= 1;
                 if (par->state == 0) {
-                    //queue_push(q, upRule);
-                    vector_insert(topo_vec, 0, upRule);
-                    //printf("PUSHED TO THE VEC\n");
+                    queue_push(q, upRule);
                 }
-            });
+
+            }); 
 
             vector_destroy(parents);
         }
-
-
         vector_destroy(deps);
         
     }
@@ -171,16 +148,16 @@ void* run_deps_cmds(void* arg) {
 int parmake(char *makefile, size_t num_threads, char **targets) {
     // good luck!
     rag = parser_parse_makefile(makefile, targets);
-    //q = queue_create(-1);
+    q = queue_create(-1);
     vector* gr_vertexes = graph_neighbors(rag, ""); //all vertexes are the target name in string
+    thread_num = num_threads;
 
     if (vector_size(gr_vertexes) == 0) {
-        //queue_destroy(q);
+        queue_destroy(q);
         graph_destroy(rag);
         vector_destroy(gr_vertexes);
         return 0;
     }
-    topo_vec = shallow_vector_create();
     topo_set = shallow_set_create();
 
     for (size_t i = 0; i < vector_size(gr_vertexes); i++) {
@@ -214,8 +191,7 @@ int parmake(char *makefile, size_t num_threads, char **targets) {
     }
 
     set_destroy(topo_set);
-    //queue_destroy(q);
-    vector_destroy(topo_vec);
+    queue_destroy(q);
     vector_destroy(gr_vertexes);
     graph_destroy(rag);
     pthread_mutex_destroy(&m);
