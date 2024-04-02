@@ -67,7 +67,7 @@ int connect_to_server(const char *host, const char *port) {
         close(sock_fd);
         exit(1);
     }
-    puts("Connected!");
+    //puts("Connected!");
     freeaddrinfo(result);
     
     return sock_fd;
