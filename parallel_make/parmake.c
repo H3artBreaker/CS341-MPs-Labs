@@ -73,6 +73,11 @@ void q_push_topoSort(char* target) {
     vector_destroy(deps);
 }
 
+
+// finished the problem of queue block when queue is empty by adding a global set which is to keep track of the goal rules. 
+// If one goal rule is finished, we then remove it from the set meaning we finished one goal rule. The thread can then process other rules. 
+// Until the set is empty meaning we have processed all the goal rule, then we can terminate the thread by returning
+
 void* run_deps_cmds(void* gr_vec) {
     while (1) {
         //pthread_t tid = pthread_self();
@@ -131,7 +136,6 @@ void* run_deps_cmds(void* gr_vec) {
                 }
             }
 
-            //check if we need to add its parent in (the node that depends on the current target)
             pthread_mutex_lock(&m);
             vector *parents = graph_antineighbors(rag, target);
             pthread_mutex_unlock(&m);
