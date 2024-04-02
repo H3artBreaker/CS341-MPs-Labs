@@ -30,10 +30,10 @@ void close_program(int signal);
  */
 void close_server_connection() {
     if (shutdown(serverSocket, SHUT_RDWR) != 0) {
-        perror("Shutdown problem");
+        perror("Shutdown problem in client");
     }
     if (close(serverSocket) != 0) {
-        perror("Close problem");
+        perror("Close problem in client");
     }
 }
 

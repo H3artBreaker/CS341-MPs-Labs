@@ -48,7 +48,7 @@ void close_server() {
             close(clients[i]);
         }
     }
-    pthread_cancel(pthread_self());
+
 }
 
 /**
@@ -139,22 +139,21 @@ void run_server(char *port) {
     }
 
     struct sockaddr_in * result_addr = (struct sockaddr_in*) result->ai_addr;
+    freeaddrinfo(result);
     printf("Listening on file descriptor %d, port %d\n", serverSocket, ntohs(result_addr->sin_port));
     
     printf("Waiting for connection...\n");
-    while(1) {
-    
-        
+    while(endSession == 0) {
+
         int client_fd = accept(serverSocket, NULL, NULL);
         printf("Connection made: client_fd=%d\n", client_fd);
         if(client_fd <0) {
-            perror("bad accept:");
+            perror("bad accept in server");
             exit(1);
         }
-        clientsCount++;
+        
         pthread_mutex_lock(&mutex);
-        if (clientsCount > MAX_CLIENTS) {
-            clientsCount--;
+        if (clientsCount == MAX_CLIENTS) {
             shutdown(client_fd, SHUT_RDWR);
             close(client_fd);
             continue;
@@ -162,13 +161,20 @@ void run_server(char *port) {
         pthread_mutex_unlock(&mutex);
 
         pthread_t thread;
-        pthread_create(&thread, NULL, process_client, (void*)&client_fd);
+        for (size_t i = 0; i < MAX_CLIENTS; i++) {
+            if (clients[i] == 0) { //haven't been used
+                clients[i] = -1;
+            }
+            if (clients[i] == -1) { 
+                clients[i] = client_fd;
+                clientsCount++;
+                intptr_t idx = i;
+                pthread_create(&thread, NULL, process_client, (void*)idx);
+                break;
+            }
+        }
 
-        pthread_join(thread, NULL);
-
-       
-        // shutdown(client_fd, SHUT_RDWR); // We have no more to say, and we're not listening anymore (no more 'read')
-        // close(client_fd);
+        //pthread_join(thread, NULL);
      }
 }
 
@@ -207,7 +213,6 @@ void *process_client(void *p) {
     intptr_t clientId = (intptr_t)p;
     ssize_t retval = 1;
     char *buffer = NULL;
-
     while (retval > 0 && endSession == 0) {
         retval = get_message_size(clients[clientId]);
         if (retval > 0) {
