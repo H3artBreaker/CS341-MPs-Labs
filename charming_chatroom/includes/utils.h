@@ -5,7 +5,6 @@
 
 #pragma once
 
-
 /**
  * The largest size the message can be that a client
  * sends to the server.
