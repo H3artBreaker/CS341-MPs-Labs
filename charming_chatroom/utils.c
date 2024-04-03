@@ -47,15 +47,16 @@ ssize_t read_all_from_socket(int socket, char *buffer, size_t count) {
         byte_read = read(socket, buffer + total_read, count - total_read);
         if (byte_read == -1 && errno != EINTR) {
             //error detected
-            perror("write error");
-            return -1;   
+            perror("read error");
+            continue;   
         } else if (byte_read == 0) {
             //socket disconnected
             return 0;
+        } else if (byte_read > 0){
+            total_read += byte_read;
         } else {
-            break;
+            return -1;
         }
-        total_read += byte_read;
     }
     return (ssize_t)total_read;
 }
@@ -68,14 +69,15 @@ ssize_t write_all_to_socket(int socket, const char *buffer, size_t count) {
         if (byte_written == -1 && errno != EINTR) {
             //error detected
             perror("write error");
-            return -1;   
+            continue;   
         } else if (byte_written == 0) {
             //socket disconnected
             return 0;
+        } else if (byte_written > 0){
+            total_written += byte_written;
         } else {
-            break;
+            return -1;
         }
-        total_written += byte_written;
     }
     return (ssize_t)total_written;
 }

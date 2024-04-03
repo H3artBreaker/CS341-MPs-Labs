@@ -35,19 +35,6 @@ static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 void close_server() {
     endSession = 1;
     // add any additional flags here you want.
-    if (shutdown(serverSocket, SHUT_RDWR) != 0) {
-        perror("shutdown():");
-    }
-    close(serverSocket);
-
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        if (clients[i] != -1) {
-            if (shutdown(clients[i], SHUT_RDWR) != 0) {
-                perror("shutdown(): ");
-            }
-            close(clients[i]);
-        }
-    }
 
 }
 
@@ -100,12 +87,16 @@ void run_server(char *port) {
     int s = getaddrinfo(NULL, port, &hints, &result);
     if (s != 0) {
         fprintf (stderr, "getaddrinfo: %s\n", gai_strerror (s));
+        freeaddrinfo(result);
+        result = NULL;
         exit (1);
     }
 
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket < 0) {
         perror("socket failed");
+        freeaddrinfo(result);
+        result = NULL;
         exit(EXIT_FAILURE);
     }
     int enable = 1;
@@ -114,35 +105,48 @@ void run_server(char *port) {
     if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
         perror("setsockopt(SO_REUSEADDR) failed");
         close(serverSocket);
+        freeaddrinfo(result);
+        result = NULL;
         exit(1);
     }
 
     // Set SO_REUSEPORT
-    #ifdef SO_REUSEPORT
+    //#ifdef SO_REUSEPORT
     if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(int)) < 0) {
         perror("setsockopt(SO_REUSEPORT) failed");
         close(serverSocket);
+        freeaddrinfo(result);
+        result = NULL;
         exit(1);
     }
-    #endif
+    //#endif
 
     if (bind(serverSocket, result->ai_addr, result->ai_addrlen) != 0 ) {
         perror("Bind error");
         close(serverSocket);
+        freeaddrinfo(result);
+        result = NULL;
         exit(1);
     }
 
     if (listen(serverSocket, MAX_CLIENTS)) {
         perror("Listen error");
+        freeaddrinfo(result);
+        result = NULL;
         shutdown(serverSocket, SHUT_RDWR);
         exit(1);
     }
 
-    struct sockaddr_in * result_addr = (struct sockaddr_in*) result->ai_addr;
+    //struct sockaddr_in * result_addr = (struct sockaddr_in*) result->ai_addr;
     freeaddrinfo(result);
-    printf("Listening on file descriptor %d, port %d\n", serverSocket, ntohs(result_addr->sin_port));
+    result = NULL;
+    //printf("Listening on file descriptor %d, port %d\n", serverSocket, ntohs(result_addr->sin_port));
+    for (size_t i = 0; i < MAX_CLIENTS; i++) {
+        clients[i] = -1;
+    }
     
     printf("Waiting for connection...\n");
+    pthread_t tid[MAX_CLIENTS];
     while(endSession == 0) {
 
         int client_fd = accept(serverSocket, NULL, NULL);
@@ -153,29 +157,26 @@ void run_server(char *port) {
         }
         
         pthread_mutex_lock(&mutex);
-        if (clientsCount == MAX_CLIENTS) {
+        if (clientsCount >= MAX_CLIENTS) {
+            pthread_mutex_unlock(&mutex);
             shutdown(client_fd, SHUT_RDWR);
             close(client_fd);
             continue;
         }
         pthread_mutex_unlock(&mutex);
 
-        pthread_t thread;
+        //pthread_t thread;
         for (size_t i = 0; i < MAX_CLIENTS; i++) {
-            if (clients[i] == 0) { //haven't been used
-                clients[i] = -1;
-            }
             if (clients[i] == -1) { 
                 clients[i] = client_fd;
                 clientsCount++;
                 intptr_t idx = i;
-                pthread_create(&thread, NULL, process_client, (void*)idx);
+                pthread_create(tid + i, NULL, process_client, (void*)idx);
                 break;
             }
         }
 
-        //pthread_join(thread, NULL);
-     }
+    }
 }
 
 /**
