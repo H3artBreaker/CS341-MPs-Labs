@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
     int mapper_count = atoi(mapper_count_str);
     // Create an input pipe for EACH mapper.
     int* mpr_fds[mapper_count]; 
+    //int mpr_fds[mapper_count][2]; 
     for (int i = 0; i < mapper_count; i++) {
         mpr_fds[i] = calloc(2, sizeof(int));
         if (pipe(mpr_fds[i]) < 0) {
