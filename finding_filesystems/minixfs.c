@@ -9,6 +9,9 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <string.h>
+
+data_block* get_block(file_system *fs, inode* ind, uint64_t idx);
 
 /**
  * Virtual paths:
@@ -74,14 +77,63 @@ int minixfs_chown(file_system *fs, char *path, uid_t owner, gid_t group) {
 }
 
 inode *minixfs_create_inode_for_path(file_system *fs, const char *path) {
-    // Land ahoy!
-    return NULL;
+    //return NULL if inode already exists or * cannot be created.
+    if (get_inode(fs, path)) {
+        return NULL;
+    }
+    if (valid_filename(path) != 1) {
+        return NULL;
+    }
+
+    const char* filename = NULL;
+    inode* parent = parent_directory(fs, path, &filename);
+    inode_number ndNum = first_unused_inode(fs);
+    if (ndNum == -1) {
+        perror("NO ENOUGH INODE");
+        return NULL;
+    }
+    inode* new_node = fs->inode_root + ndNum;
+    init_inode(parent, new_node);
+    //add a new dirent to the parent and then increase the parent's size.
+    //minixfs_dirent new_dirent = {(char*)filename, ndNum};
+    int parBlockNum = parent->size / sizeof(data_block);
+    //int remainder = parent->size % sizeof(data_block);
+    
+    if (parBlockNum >= NUM_DIRECT_BLOCKS && parent->indirect == UNASSIGNED_NODE) { //if all direct blocks are used
+        if (add_single_indirect_block(fs, parent) == -1) {
+            perror("Failed addng indirect block in parent");
+            return NULL;
+        }
+    }
+    
+    clock_gettime(CLOCK_REALTIME, &(parent->atim));
+    return new_node;
 }
 
 ssize_t minixfs_virtual_read(file_system *fs, const char *path, void *buf,
                              size_t count, off_t *off) {
     if (!strcmp(path, "info")) {
-        // TODO implement the "info" virtual file here
+        //first generate the block_info_string parameter(num_used_blocks)
+        char* dm = GET_DATA_MAP(fs->meta);
+        int used = 0;
+        for (size_t i = 0; i < fs->meta->dblock_count; i++){ 
+            if (dm[i] == 1) {
+                used++;
+            }
+        }
+        char* content = block_info_string(used);
+        if ((unsigned long)*off > strlen(content)) {
+            return 0;
+        }
+        size_t cpyBytes;
+        if (count > strlen(content) - *off) {
+            cpyBytes = strlen(content) - *off;
+        } else {
+            cpyBytes = count;
+        }
+        memcpy(buf, content + *off, cpyBytes);
+        *off += cpyBytes;
+        return cpyBytes;
     }
 
     errno = ENOENT;
@@ -90,8 +142,52 @@ ssize_t minixfs_virtual_read(file_system *fs, const char *path, void *buf,
 
 ssize_t minixfs_write(file_system *fs, const char *path, const void *buf,
                       size_t count, off_t *off) {
-    // X marks the spot
-    return -1;
+    //size_t max = NUM_DIRECT_BLOCKS + NUM_INDIRECT_BLOCKS;
+    uint64_t required_blocks = ceil((double)(count + *off) / (double)sizeof(data_block)); 
+    int result = minixfs_min_blockcount(fs, path, required_blocks); //check if we have enough space in current inode for the writing
+    if (result == -1) {
+        perror("min_blockcount ERROR");
+        errno = ENOSPC;
+        return -1;
+    }
+
+    inode* fileInode = get_inode(fs, path);
+
+    if (is_file(fileInode) == 0) {
+        perror("NOT A FILE");
+        return -1;
+    }
+
+    int blockIndex = *off / sizeof(data_block); 
+    size_t cpyBytes = 0, bytes_written = 0;
+    if (fileInode->size < *off + count) {
+        fileInode->size = *off + count;
+    }
+
+    while (bytes_written < count) {
+        int blockOffset = *off % sizeof(data_block);
+        //if we reach the end of the file
+        if (sizeof(data_block) - blockOffset < sizeof(data_block)) { //when we start with part of the db 
+            cpyBytes = (count > sizeof(data_block) - blockOffset) ? sizeof(data_block) - blockOffset : count;
+        } else if (count - bytes_written >= sizeof(data_block)) { //need to write a whole block
+            cpyBytes = sizeof(data_block);
+        } else {
+            cpyBytes = count - bytes_written;
+        }
+
+        data_block* db = get_block(fs, fileInode, blockIndex);
+        if (db == NULL) break;
+        memcpy((db->data) + blockOffset, buf + bytes_written, cpyBytes); //cpy from buffer
+
+        bytes_written += cpyBytes;
+        blockIndex++;
+        *off += cpyBytes;
+    }
+    
+    
+    clock_gettime(CLOCK_REALTIME, &(fileInode->atim));
+    clock_gettime(CLOCK_REALTIME, &(fileInode->mtim));
+    return count;
 }
 
 ssize_t minixfs_read(file_system *fs, const char *path, void *buf, size_t count,
@@ -99,7 +195,7 @@ ssize_t minixfs_read(file_system *fs, const char *path, void *buf, size_t count,
     const char *virtual_path = is_virtual_path(path);
     if (virtual_path)
         return minixfs_virtual_read(fs, virtual_path, buf, count, off);
-
+    
     inode* fileInode = get_inode(fs, path);
     if (fileInode == NULL) {
         perror("INODE DOES NOT EXIST");
@@ -125,19 +221,43 @@ ssize_t minixfs_read(file_system *fs, const char *path, void *buf, size_t count,
         count = (size_t)(fileInode->size - (uint64_t)*off);
     }
 
-    // int offsetBlock = (*off / sizeof(data_block)) + 1; //
-    // int readBlocks = ceil((double)count / (double)sizeof(data_block));
-    // int read_indiBlock;
-    // if (offsetBlock + readBlocks > NUM_DIRECT_BLOCKS) {
-    //     read_indiBlock = 1;
-    // }
+    int blockIndex = *off / sizeof(data_block); 
+    size_t cpyBytes = 0, bytes_read = 0;
 
-    
+    while (bytes_read < count) {
+        int blockOffset = *off % sizeof(data_block);
+        //if we reach the end of the file
+        if (sizeof(data_block) - blockOffset < sizeof(data_block)) { //when we start with part of the db 
+            cpyBytes = (count > sizeof(data_block) - blockOffset) ? sizeof(data_block) - blockOffset : count;
+        } else if (count - bytes_read >= sizeof(data_block)) { //need to read a whole block
+            cpyBytes = sizeof(data_block);
+        } else {
+            cpyBytes = count - bytes_read;
+        }
 
+        data_block* db = get_block(fs, fileInode, blockIndex);
+        if (db == NULL) break;
+        memcpy(buf + bytes_read, (db->data) + blockOffset, cpyBytes); //cpy at the correct block place
+        printf("buf in loop: %s\n", (char*)buf);
 
+        bytes_read += cpyBytes;
+        blockIndex++;
+        *off += cpyBytes;
+    }
 
-
-
+    clock_gettime(CLOCK_REALTIME, &(fileInode->atim));
 
     return bytes_read;
+}
+
+data_block* get_block(file_system *fs, inode* ind, uint64_t idx) { //need to check the algorithm here
+    if (idx < NUM_DIRECT_BLOCKS) {
+        return fs->data_root + ind->direct[idx];
+    } 
+    if (idx - NUM_DIRECT_BLOCKS >= NUM_INDIRECT_BLOCKS) { //do I need to add 1 here?
+        return NULL;
+    } 
+    data_block* indiBlock = fs->data_root + ind->indirect;
+    data_block_number* crtIdx = (data_block_number*)indiBlock + (idx - NUM_DIRECT_BLOCKS);
+    return fs->data_root + *crtIdx;
 }
