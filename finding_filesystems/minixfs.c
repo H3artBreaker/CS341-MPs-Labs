@@ -11,7 +11,7 @@
 #include <math.h>
 #include <string.h>
 
-data_block* get_block(file_system *fs, inode* ind, uint64_t idx);
+//data_block* get_block(file_system *fs, inode* ind, uint64_t idx);
 
 /**
  * Virtual paths:
@@ -76,6 +76,18 @@ int minixfs_chown(file_system *fs, char *path, uid_t owner, gid_t group) {
     return 0;
 }
 
+data_block* get_block(file_system *fs, inode* ind, uint64_t idx) { //need to check the algorithm here
+    if (idx < NUM_DIRECT_BLOCKS) {
+        return fs->data_root + ind->direct[idx];
+    } 
+    if (idx - NUM_DIRECT_BLOCKS >= NUM_INDIRECT_BLOCKS) { //do I need to add 1 here?
+        return NULL;
+    } 
+    data_block* indiBlock = fs->data_root + ind->indirect;
+    data_block_number* crtIdx = (data_block_number*)indiBlock + (idx - NUM_DIRECT_BLOCKS);
+    return fs->data_root + *crtIdx;
+}
+
 inode *minixfs_create_inode_for_path(file_system *fs, const char *path) {
     //return NULL if inode already exists or * cannot be created.
     if (get_inode(fs, path)) {
@@ -87,25 +99,31 @@ inode *minixfs_create_inode_for_path(file_system *fs, const char *path) {
 
     const char* filename = NULL;
     inode* parent = parent_directory(fs, path, &filename);
-    inode_number ndNum = first_unused_inode(fs);
-    if (ndNum == -1) {
+    inode_number ndIdx = first_unused_inode(fs);
+    if (ndIdx == -1) {
         perror("NO ENOUGH INODE");
         return NULL;
     }
-    inode* new_node = fs->inode_root + ndNum;
+    inode* new_node = fs->inode_root + ndIdx;
     init_inode(parent, new_node);
     //add a new dirent to the parent and then increase the parent's size.
-    //minixfs_dirent new_dirent = {(char*)filename, ndNum};
-    int parBlockNum = parent->size / sizeof(data_block);
-    //int remainder = parent->size % sizeof(data_block);
-    
-    if (parBlockNum >= NUM_DIRECT_BLOCKS && parent->indirect == UNASSIGNED_NODE) { //if all direct blocks are used
+    minixfs_dirent new_dirent = {(char*)filename, ndIdx};
+
+    int parBlockIdx = parent->size / sizeof(data_block);
+    int remainder = parent->size % sizeof(data_block);
+    data_block* add_in = NULL;
+    if (parBlockIdx >= NUM_DIRECT_BLOCKS && parent->indirect == UNASSIGNED_NODE) {
         if (add_single_indirect_block(fs, parent) == -1) {
             perror("Failed addng indirect block in parent");
             return NULL;
         }
-    }
-    
+    } 
+    add_in = get_block(fs, parent, parBlockIdx);
+    char str_dirent[FILE_NAME_ENTRY];
+    make_string_from_dirent(str_dirent, new_dirent);
+    memcpy(add_in->data + remainder, str_dirent, FILE_NAME_ENTRY);
+
+    parent->size += FILE_NAME_ENTRY;
     clock_gettime(CLOCK_REALTIME, &(parent->atim));
     return new_node;
 }
@@ -250,14 +268,3 @@ ssize_t minixfs_read(file_system *fs, const char *path, void *buf, size_t count,
     return bytes_read;
 }
 
-data_block* get_block(file_system *fs, inode* ind, uint64_t idx) { //need to check the algorithm here
-    if (idx < NUM_DIRECT_BLOCKS) {
-        return fs->data_root + ind->direct[idx];
-    } 
-    if (idx - NUM_DIRECT_BLOCKS >= NUM_INDIRECT_BLOCKS) { //do I need to add 1 here?
-        return NULL;
-    } 
-    data_block* indiBlock = fs->data_root + ind->indirect;
-    data_block_number* crtIdx = (data_block_number*)indiBlock + (idx - NUM_DIRECT_BLOCKS);
-    return fs->data_root + *crtIdx;
-}
