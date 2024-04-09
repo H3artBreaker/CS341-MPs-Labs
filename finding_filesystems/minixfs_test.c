@@ -43,27 +43,30 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     off_t off = 0;
-    // char expected[14];
-    // memset(expected, 0, 14);
-    // ssize_t bytes_read = minixfs_read(fs, "/goodies/hello.txt", expected, 13, &off);
-    // if (bytes_read == -1) {
-    //     printf("fail 1\n");
-    //     close_fs(&fs);
-    //     return -1;
-    // }
-
-    // off = 0;
-    // ssize_t bytes_written = minixfs_write(fs, "/newhello.txt", expected, 13, &off);
-    // if (bytes_written == -1) {
-    //     printf("fail 2\n");
-    //     close_fs(&fs);
-    //     return -1;
-    // }
-    off = 12;
+    char expected[14];
+    memset(expected, 0, 14);
+    ssize_t bytes_read = minixfs_read(fs, "/goodies/hello.txt", expected, 13, &off);
+    if (bytes_read == -1) {
+        printf("fail 1\n");
+        close_fs(&fs);
+        return -1;
+    }
+    struct stat* buffer = NULL;
+    if (minixfs_stat(fs, "/newhello.txt", buffer) == -1) {
+        printf("NO stat for now before creating the new file!\n");
+    }
+    off = 0;
+    ssize_t bytes_written = minixfs_write(fs, "/newhello.txt", expected, 13, &off);
+    if (bytes_written == -1) {
+        printf("fail 2\n");
+        close_fs(&fs);
+        return -1;
+    }
+    off = 0;
     char buf[14];
     memset(buf, 0, 14);
     printf("buf at start: %s\n", buf);
-    ssize_t bytes_read_out = minixfs_read(fs, "/goodies/hello.txt", buf, 12, &off);
+    ssize_t bytes_read_out = minixfs_read(fs, "/newhello.txt", buf, 12, &off);
     if (bytes_read_out == -1) {
         printf("fail 3\n");
         close_fs(&fs);
@@ -71,13 +74,13 @@ int main(int argc, char *argv[]) {
     }
     //open /goodies/hello.txt with open() or fopen() and read the contents way you normally would
     printf("buf: %s\n", buf);
-    // if (!strcmp(buf, expected)) {
-    //     printf("same\n");
-    // } else {
-    //     printf("different\n");
-    //     printf("expected: %s\n", expected);
-    //     printf("buf: %s\n", buf);
-    // }
+    if (!strcmp(buf, expected)) {
+        printf("same\n");
+    } else {
+        printf("different\n");
+        printf("expected: %s\n", expected);
+        printf("buf: %s\n", buf);
+    }
     close_fs(&fs);
     return 0;
 }

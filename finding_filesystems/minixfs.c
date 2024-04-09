@@ -93,12 +93,13 @@ inode *minixfs_create_inode_for_path(file_system *fs, const char *path) {
     if (get_inode(fs, path)) {
         return NULL;
     }
-    if (valid_filename(path) != 1) {
-        return NULL;
-    }
-
+    
     const char* filename = NULL;
     inode* parent = parent_directory(fs, path, &filename);
+    if (valid_filename(filename) != 1) {
+        perror("FILE NAME NOT VALID!");
+        return NULL;
+    }
     inode_number ndIdx = first_unused_inode(fs);
     if (ndIdx == -1) {
         perror("NO ENOUGH INODE");
@@ -106,7 +107,7 @@ inode *minixfs_create_inode_for_path(file_system *fs, const char *path) {
     }
     inode* new_node = fs->inode_root + ndIdx;
     init_inode(parent, new_node);
-    //add a new dirent to the parent and then increase the parent's size.
+    //add a new dirent to the parent and then increase the parent's size. //for directory, the data blocks are used for saving the files and subdirectories; for file, data blocks are used for saving the file contents
     minixfs_dirent new_dirent = {(char*)filename, ndIdx};
 
     int parBlockIdx = parent->size / sizeof(data_block);
@@ -256,7 +257,6 @@ ssize_t minixfs_read(file_system *fs, const char *path, void *buf, size_t count,
         data_block* db = get_block(fs, fileInode, blockIndex);
         if (db == NULL) break;
         memcpy(buf + bytes_read, (db->data) + blockOffset, cpyBytes); //cpy at the correct block place
-        printf("buf in loop: %s\n", (char*)buf);
 
         bytes_read += cpyBytes;
         blockIndex++;
