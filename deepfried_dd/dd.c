@@ -73,15 +73,15 @@ int main(int argc, char **argv) {
         exit(1);
     }
     //move to the starting position
-    if (skip_input_blocks > 0) { 
-        if (fseek(input_file, skip_input_blocks * block_size, SEEK_SET) != -1) {
+    if (skip_input_blocks > 0 && input_file != stdin) { 
+        if (fseek(input_file, skip_input_blocks * block_size, SEEK_SET) != 0) {
             perror("FSEEK PROBLEM IN INPUT FILE");
             exit(1);
         }
     }
 
     if (skip_output_blocks > 0 && output_file != stdout) {
-        if (fseek(output_file, skip_output_blocks * block_size, SEEK_SET) != -1) {
+        if (fseek(output_file, skip_output_blocks * block_size, SEEK_SET) != 0) {
             perror("FSEEK PROBLEM IN OUTPUT FILE");
             exit(1);
         }
@@ -128,6 +128,7 @@ int main(int argc, char **argv) {
             print_status = 0;
         }
     }
+
 
 
     fclose(input_file);
