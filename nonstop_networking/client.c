@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
     if (method == PUT) {
         struct stat st;
         size_t fileSize = 0;  //indicates how many bytes are present in the binary data in the request.
-        if (stat(remoteFile, &st) == 0) {
+        if (stat(localFile, &st) == 0) {
             fileSize = st.st_size;
         } else {
             perror("STAT ERROR IN PUT");
@@ -90,18 +90,20 @@ int main(int argc, char **argv) {
             print_invalid_response();
             exit(1);
         }
-        int header_len = snprintf(header, sizeof(header), "%s %s\n%zu", "PUT", remoteFile, fileSize);
+        // int header_len = snprintf(header, sizeof(header), "%s %s\n%zu", "PUT", remoteFile, fileSize);
+        int header_len = snprintf(header, sizeof(header), "%s %s\n", "PUT", remoteFile);
+        memcpy(header + header_len, &fileSize, sizeof(fileSize));
+        header_len += sizeof(fileSize);
         if (header_len > 0) {
             write(sock_fd, header, header_len);
-            shutdown(sock_fd, SHUT_WR);
         } else {
             perror("write header error in GET");
             free(parse_result);
             close(sock_fd);
             exit(1);
         }
-        //get the binary data of the remoteFile and write it to the socket.
-        FILE* file = fopen(remoteFile, "rb");  // Open the file in binary mode
+        //get the binary data of the localFile and write it to the socket.
+        FILE* file = fopen(localFile, "rb");  // Open the local file in binary mode
         if (file == 0) {
             perror("FAILED TO OPEN FILE in PUT");
             fclose(file);
@@ -111,7 +113,7 @@ int main(int argc, char **argv) {
         }
 
         char read_buffer[BUFFER_SIZE];
-        while (!feof(file)) {
+        while (!feof(file)) {   
             size_t byte_read = fread(read_buffer, 1, BUFFER_SIZE, file); //read every blocks（buffer)
             if (byte_read > 0) { //read successfully
                 size_t byte_written = write_all_to_socket(sock_fd, read_buffer, byte_read);
@@ -176,6 +178,7 @@ int main(int argc, char **argv) {
     }
 
     free(parse_result);
+    // printf("HELLO");
     return 1;
 }
 
