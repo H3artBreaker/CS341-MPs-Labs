@@ -13,3 +13,4 @@
     } while (0);
 
 typedef enum { GET, PUT, DELETE, LIST, V_UNKNOWN } verb;
+ssize_t write_all_to_socket(int socket, const char *buffer, size_t count);
