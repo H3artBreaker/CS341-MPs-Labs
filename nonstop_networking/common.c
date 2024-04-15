@@ -8,6 +8,28 @@
 #include <errno.h>
 #include <unistd.h>
 
+ssize_t read_all_from_socket(int socket, char *buffer, size_t count) {
+    // Your Code Here
+    size_t total_read = 0;
+    ssize_t byte_read = 0;
+    while (total_read < count) {
+        byte_read = read(socket, buffer + total_read, count - total_read);
+        if (byte_read == -1 && errno == EINTR) {
+            //error detected
+            continue;   
+        } else if (byte_read == 0) {
+            //socket disconnected
+            break;
+        } else if (byte_read > 0){
+            total_read += byte_read;
+        } else {
+            return -1;
+        }
+    }
+    return (ssize_t)total_read;
+}
+
+
 
 
 
