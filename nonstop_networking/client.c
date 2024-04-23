@@ -17,7 +17,7 @@
 
 
 #include "common.h"
-#define BUFFER_SIZE 2048
+//#define BUFFER_SIZE 2048
 
 char **parse_args(int argc, char **argv);
 verb check_args(char **args);
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
 
     //puts("Connected!");
 
-    char header[1024]; //VERB [filename]\n([File size])
+    char header[HEADER_BUFFER_SIZE]; //VERB [filename]\n([File size])
     memset(header, 0, sizeof(header)); //clear the buffer
     FILE* stream = NULL;
     if (method == GET) {
@@ -178,7 +178,6 @@ int main(int argc, char **argv) {
     }
 
     free(parse_result);
-    // printf("HELLO");
     return 1;
 }
 

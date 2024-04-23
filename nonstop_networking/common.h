@@ -6,6 +6,9 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#define BUFFER_SIZE 2048
+#define HEADER_BUFFER_SIZE 1024
+
 #define LOG(...)                      \
     do {                              \
         fprintf(stderr, __VA_ARGS__); \

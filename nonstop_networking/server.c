@@ -18,24 +18,31 @@
 #include <dirent.h>
 #include <signal.h>
 #include "common.h"
+#include <errno.h>
+#include <fcntl.h>
+
+typedef struct {
+    int state;  // Represents the current state in the DFA
+    verb method;  // HTTP request verb, e.g., "GET"
+    char filename[255];  // Filename for file-related operations
+} connection_state_t;
 
 void remove_directory_contents(const char *path);
+void client_process(struct epoll_event client_event);
+size_t get_header(int client_fd, char* header);
+int header_parser(int client_fd, connection_state_t* client_info);
+int PUT_file(int client_fd, connection_state_t* client_info);
 
 static int epoll_fd;
 static int server_socket;
 static vector* file_list;
 static dictionary* fd_to_connState;
-static char* dir_name;
+static char* dir_name = NULL;
+
 
 static int MAX_EVENTS = 50;
 
-typedef struct {
-    int state;  // Represents the current state in the DFA
-    verb method;  // HTTP request verb, e.g., "GET"
-    char *request_buffer;  // Buffer for storing request data
-    int buffer_offset;  // Offset for reading/writing in the buffer
-    char *filename;  // Filename for file-related operations
-} connection_state_t;
+
 
 char* server_parser(int argc, char **argv) {
     if (argc != 2) {
@@ -55,7 +62,11 @@ char* server_parser(int argc, char **argv) {
     return argv[1];
 }
 
-void shutdown_server() {
+void response_generator(char* response, int client_fd, size_t fileSize) {
+    write(client_fd, response, strlen(response));
+}
+
+void shutdown_server() { //unfinished
     //clean the directory
     remove_directory_contents(dir_name);
     if (rmdir(dir_name) != 0) {
@@ -144,11 +155,12 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    fd_to_connState = shallow_to_shallow_dictionary_create();
-    file_list = shallow_vector_create();
-
+    fd_to_connState = int_to_shallow_dictionary_create();
+    //file_list = shallow_vector_create();
+    file_list = string_vector_create();
+    
     //create the temp directory
-    char* template = "XXXXXX";
+    char template[] = "XXXXXX";
     dir_name = mkdtemp(template);
     if(dir_name == NULL){
         perror("mkdtemp failed: ");
@@ -156,7 +168,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
     print_temp_directory(dir_name);
-
+    
     //setup epoll instance
     epoll_fd = epoll_create1(0);
     if (epoll_fd == -1) {
@@ -167,27 +179,26 @@ int main(int argc, char **argv) {
     
     // Register server socket with epoll (edge-triggered)
     struct epoll_event event;
-    event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;  // Edge-triggered read events
+    event.events = EPOLLIN | EPOLLET;  // Edge-triggered read events
     event.data.fd = server_socket;
-
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_socket, &event) == -1) {
-        perror("Epoll ctl failed");
+    
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_socket, &event) == -1) { //By registering this listening socket with epoll_ctl, you indicate that you want to be notified when there's activity on this socket (like new incoming connections).
         close(epoll_fd);
         close(server_socket);
         exit(EXIT_FAILURE);
     }
 
     struct epoll_event events[MAX_EVENTS];
-
+    
     while (1) {
         int event_count = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
-        if (event_count == -1) {
+        if (event_count == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             perror("Epoll wait failed");
             shutdown_server();
         }
 
         for (int i = 0; i < event_count; i++) {
-            if (events[i].data.fd == server_socket) {
+            if (events[i].data.fd == server_socket) { // 
                 int client_fd = accept(server_socket, NULL, NULL);
                 if (client_fd == -1) {
                     perror("Accept failed");
@@ -207,20 +218,222 @@ int main(int argc, char **argv) {
                 connection_state_t* conn_stat = calloc(1, sizeof(connection_state_t));
                 dictionary_set(fd_to_connState, &client_fd, conn_stat);
             } else {
-                
+                //printf("client fd is %d\n", events[i].data.fd);
+                client_process(events[i]);
             }
         }
 
     }
 
-
-
-
     //clean everything
     shutdown_server();
 
-
     return 0;
+}
+
+void client_process(struct epoll_event client_event) {
+    int client_fd = client_event.data.fd;
+    if (dictionary_contains(fd_to_connState, &client_fd) == false) {
+        return;
+    }
+    connection_state_t* client_info = dictionary_get(fd_to_connState, &client_fd);
+
+    //see if the header is parsed, if no parse it
+    if (client_info->state == 0) { //first time parse it
+        if (header_parser(client_fd, client_info) != 1) {
+            perror("PROBLEM IN PARSE HEAD");
+        }
+        client_info->state = 1;
+    }
+
+    if (client_info->method == GET) {
+
+    } else if (client_info->method == PUT) {
+        if (PUT_file(client_fd, client_info) != 1) {
+            client_info->state = 0;
+            perror("PUT FILE ERROR");
+        }
+    } else if (client_info->method == DELETE) {
+        char* delete_file = client_info->filename;
+        char path[BUFFER_SIZE];
+        snprintf(path, sizeof(path), "%s/%s", dir_name, delete_file);
+		if (remove(path) < 0) {
+			client_info->state = 0;
+		}
+        //printf("DELETE FILE IS %s\n", delete_file);
+        int removed = 0;
+        for (size_t i = 0; i < vector_size(file_list); i++) {
+            if (strncmp(vector_get(file_list, i), delete_file, strlen(delete_file)) == 0) {
+                vector_erase(file_list, i);
+                removed = 1;
+                client_info->state = 1;
+                break;
+            }
+        }
+        if (removed == 0) {
+            client_info->state = 0;
+        }
+        // printf("state after loop is %u \n", client_info->state);
+    } else if (client_info->method == LIST) {
+
+    } 
+    // printf("filename is %s \n", client_info->filename);
+    // printf("method is %u \n", client_info->method);
+    // printf("state is %u \n", client_info->state);
+    if (client_info->state == 1) {
+        if (client_info->method == PUT || client_info->method == DELETE) {
+            //printf("GENERATOR\n");
+            response_generator("OK\n", client_fd, 0);
+        }
+    } else {
+        //printf("TEST\n");
+        if (client_info->method == PUT || client_info->method == DELETE) {
+            response_generator("ERROR\nPUT OR DELETE FAILED\n", client_fd, 0);
+        }
+    }
+    //printf("END??\n");
+    free(client_info);
+    dictionary_remove(fd_to_connState, &client_fd);
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL); //!!!!!!
+    //printf("FINISHED\n");
+    
+}
+
+/*
+-1 has error
+-100 too little
+-500 too much
+1 success for all
+
+*/
+
+
+int PUT_file(int client_fd, connection_state_t* client_info) {
+    char* filename = client_info->filename;
+    char wholePath[BUFFER_SIZE];
+    snprintf(wholePath, sizeof(wholePath), "%s/%s", dir_name, filename);
+
+    //FILE* file_stream = fopen(wholePath, "w");
+    int fd = open(wholePath, O_WRONLY | O_CREAT, 00777);
+    if (fd == -1) {
+        perror("Failed to open file");
+        return -1;
+    }
+
+    // Get the file size 
+    size_t file_size = 0;
+    char size_buf[BUFFER_SIZE];
+    size_t bytes_read = read_all_from_socket(client_fd, size_buf, sizeof(size_t));
+    if (bytes_read != sizeof(size_t)) {
+        perror("Error reading file size");
+        //fclose(file_stream);
+        close(fd);
+        return -1;
+    }
+    memcpy(&file_size, size_buf, sizeof(size_t));
+    
+    // Write the binary data to the file on the server
+    char buffer[BUFFER_SIZE];
+    size_t total_read = 0;
+    while (total_read < file_size) {
+        size_t byte_read = read_all_from_socket(client_fd, buffer, BUFFER_SIZE);
+        if (byte_read == 0 && total_read < file_size) {
+            //fclose(file_stream);
+            close(fd);
+            return -100; // Not enough data
+        }
+        if (byte_read == (size_t)-1) {
+            //fclose(file_stream);
+            close(fd);
+            return -1;
+        }
+        if (byte_read > 0) { // Successful read
+            //printf("start writing with br %zu\n", byte_read);
+            //size_t byte_written = fwrite(buffer, 1, byte_read, file_stream);
+            size_t byte_written = write(fd, buffer, byte_read);
+            if (byte_written != byte_read) {
+                perror("Failed to write data to file");
+                //fclose(file_stream);
+                close(fd);
+                return -1;
+            }
+            //printf("finished writing\n");
+        }
+        total_read += byte_read;
+    }
+
+    if (total_read > file_size || read_all_from_socket(client_fd, buffer, BUFFER_SIZE) > 0) {
+        //fclose(file_stream);
+        close(fd);
+        return -500; // Excessive data
+    }
+
+    //int r = fclose(file_stream); // Close the file stream
+    close(fd);
+
+    // Add to the file list
+    vector_push_back(file_list, filename);
+
+    return 1; // Success
+}
+
+
+
+
+int header_parser(int client_fd, connection_state_t* client_info) {
+    char header[HEADER_BUFFER_SIZE]; //HEADER_BUFFER_SIZE == 1024
+    size_t header_len = get_header(client_fd, header);
+    if (header_len <= 0) {
+        return (int)header_len;
+    }
+    //printf("the header is %s \n", header);
+    //check verb
+    if (strncmp(header, "GET ", 4) == 0) { //add the whitespace in to compare
+        client_info->method = GET;
+        strcpy(client_info->filename, header + 4);
+        client_info->filename[strlen(client_info->filename) - 1] = '\0'; //replace the \n by \0
+    } else if (strncmp(header, "PUT ", 4) == 0) { //add the whitespace in to compare
+        client_info->method = PUT;
+        strcpy(client_info->filename, header + 4);
+        client_info->filename[strlen(client_info->filename) - 1] = '\0'; //replace the \n by \0
+        printf("HEADER is %s \n", client_info->filename);
+    } else if (strncmp(header, "DELETE ", 7) == 0) { //add the whitespace in to compare
+        client_info->method = DELETE;
+        strcpy(client_info->filename, header + 7);
+        client_info->filename[strlen(client_info->filename) - 1] = '\0'; //replace the \n by \0
+    } else if (strncmp(header, "LIST\n", 5) == 0) {
+        client_info->method = LIST;
+    } else {
+        print_invalid_response();
+    }
+    return 1;
+}
+
+
+size_t get_header(int client_fd, char* header) { //VERB + (filename)
+    char part[1];
+    memset(part, 0, sizeof(part));
+
+    size_t total_capacity = 0;
+
+    while (1) {
+        size_t byte_read = read_all_from_socket(client_fd, part, 1);
+        if (byte_read <= 0) break;  // Handle read error or disconnect
+
+        memcpy(header + total_capacity, part, 1); //strcpy does not work here???
+        total_capacity += byte_read;
+
+        if (total_capacity >= HEADER_BUFFER_SIZE) {
+            return -500; //too much buffer overflow;
+        }
+
+        if (part[0] == '\n') {
+            break;
+        }
+
+    }
+
+    return total_capacity;
 }
 
 void remove_directory_contents(const char *path) {

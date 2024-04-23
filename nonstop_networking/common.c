@@ -14,6 +14,7 @@ ssize_t read_all_from_socket(int socket, char *buffer, size_t count) {
     ssize_t byte_read = 0;
     while (total_read < count) {
         byte_read = read(socket, buffer + total_read, count - total_read);
+        //printf("byte_read func is %s\n", buffer);
         if (byte_read == -1 && errno == EINTR) {
             //error detected
             continue;   
