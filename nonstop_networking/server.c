@@ -313,8 +313,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     char wholePath[BUFFER_SIZE];
     snprintf(wholePath, sizeof(wholePath), "%s/%s", dir_name, filename);
 
-    //FILE* file_stream = fopen(wholePath, "w");
-    int fd = open(wholePath, O_WRONLY | O_CREAT, 00777);
+    int fd = open(wholePath, O_WRONLY | O_CREAT | O_TRUNC, 00777);
     if (fd == -1) {
         perror("Failed to open file");
         return -1;
@@ -326,7 +325,6 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     size_t bytes_read = read_all_from_socket(client_fd, size_buf, sizeof(size_t));
     if (bytes_read != sizeof(size_t)) {
         perror("Error reading file size");
-        //fclose(file_stream);
         close(fd);
         return -1;
     }
@@ -338,32 +336,27 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     while (total_read < file_size) {
         size_t byte_read = read_all_from_socket(client_fd, buffer, BUFFER_SIZE);
         if (byte_read == 0 && total_read < file_size) {
-            //fclose(file_stream);
+            perror("RECEIVED TOO FEW DATA");
             close(fd);
             return -100; // Not enough data
         }
         if (byte_read == (size_t)-1) {
-            //fclose(file_stream);
             close(fd);
             return -1;
         }
         if (byte_read > 0) { // Successful read
-            //printf("start writing with br %zu\n", byte_read);
-            //size_t byte_written = fwrite(buffer, 1, byte_read, file_stream);
             size_t byte_written = write(fd, buffer, byte_read);
             if (byte_written != byte_read) {
                 perror("Failed to write data to file");
-                //fclose(file_stream);
                 close(fd);
                 return -1;
             }
-            //printf("finished writing\n");
         }
         total_read += byte_read;
     }
 
     if (total_read > file_size || read_all_from_socket(client_fd, buffer, BUFFER_SIZE) > 0) {
-        //fclose(file_stream);
+        perror("RECEIVED TOO MUCH DATA");
         close(fd);
         return -500; // Excessive data
     }
