@@ -1,6 +1,7 @@
 /**
  * savvy_scheduler
  * CS 341 - Spring 2024
+ * collaborated with edwins3
  */
 #include "libpriqueue/libpriqueue.h"
 #include "libscheduler.h"
