@@ -116,11 +116,13 @@ static int test_comparer_fcfs(void) {
     // schedule job1 at time 1
     job *j1 = make_and_schedule_new_job(10, 1, 1);
     scheduler_quantum_expired(NULL, 1);
+    
     // schedule job2 at time 3
     job *j2 = make_and_schedule_new_job(10, 1, 3);
 
     // check comparer result
     int result_schedule_first = comparer_fcfs(j1, j2);
+    //printf("time is %d\n", result_schedule_first);
     assert(result_schedule_first == -1);
     int result_schedule_second = comparer_fcfs(j2, j1);
     assert(result_schedule_second == 1);

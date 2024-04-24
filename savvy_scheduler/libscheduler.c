@@ -21,6 +21,15 @@ typedef struct _job_info {
 
     /* TODO: Add any other information and bookkeeping you need into this
      * struct. */
+    double arrive_time;
+    double running_time;
+    double priority;
+    double remainting_time;
+    double start_time;
+    double end_time;
+    double response_time;
+    double turnaround_time;
+    double wait_time;
 } job_info;
 
 void scheduler_start_up(scheme_t s) {
@@ -57,7 +66,19 @@ static int break_tie(const void *a, const void *b) {
 }
 
 int comparer_fcfs(const void *a, const void *b) {
-    // TODO: Implement me!
+    job* ja = (job*)a;
+    job* jb = (job*)b;
+
+    job_info* jainfo = ((job_info*)ja->metadata);
+    job_info* jbinfo = ((job_info*)jb->metadata);
+    if (jainfo->arrive_time > jbinfo->arrive_time) { //b arrives first
+        return 1;
+    }
+
+    if (jainfo->arrive_time < jbinfo->arrive_time) { //a arrives first
+        return -1;
+    }
+
     return 0;
 }
 
@@ -67,12 +88,24 @@ int comparer_ppri(const void *a, const void *b) {
 }
 
 int comparer_pri(const void *a, const void *b) {
-    // TODO: Implement me!
-    return 0;
+    job* ja = (job*)a;
+    job* jb = (job*)b;
+
+    job_info* jainfo = ((job_info*)ja->metadata);
+    job_info* jbinfo = ((job_info*)jb->metadata);
+    if (jainfo->priority > jbinfo->priority) { //b priority
+        return 1;
+    }
+
+    if (jainfo->priority < jbinfo->priority) { //a priority
+        return -1;
+    }
+
+    return break_tie(a, b);
 }
 
 int comparer_psrtf(const void *a, const void *b) {
-    // TODO: Implement me!
+    
     return 0;
 }
 
@@ -82,8 +115,20 @@ int comparer_rr(const void *a, const void *b) {
 }
 
 int comparer_sjf(const void *a, const void *b) {
-    // TODO: Implement me!
-    return 0;
+    job* ja = (job*)a;
+    job* jb = (job*)b;
+
+    job_info* jainfo = ((job_info*)ja->metadata);
+    job_info* jbinfo = ((job_info*)jb->metadata);
+    if (jainfo->running_time > jbinfo->running_time) { //b short
+        return 1;
+    }
+
+    if (jainfo->running_time < jbinfo->running_time) { //a short
+        return -1;
+    }
+
+    return break_tie(a, b);
 }
 
 // Do not allocate stack space or initialize ctx. These will be overwritten by
@@ -91,15 +136,32 @@ int comparer_sjf(const void *a, const void *b) {
 void scheduler_new_job(job *newjob, int job_number, double time,
                        scheduler_info *sched_data) {
     // TODO: Implement me!
+    job_info* ji = calloc(1, sizeof(job_info));
+    *ji = (job_info){job_number, time, sched_data->running_time, sched_data->priority};
+    newjob->metadata = ji;
+    priqueue_offer(&pqueue, newjob);
 }
 
 job *scheduler_quantum_expired(job *job_evicted, double time) {
     // TODO: Implement me!
-    return NULL;
+    if (priqueue_size(&pqueue) == 0) {
+        return NULL;
+    }
+    if (pqueue_scheme != PPRI && pqueue_scheme != PSRTF && job_evicted != NULL) {
+        return job_evicted;
+    }
+    if ((pqueue_scheme == PPRI || pqueue_scheme == PSRTF) && job_evicted != NULL) {
+        return priqueue_peek(&pqueue);
+    } 
+    job* r = priqueue_peek(&pqueue);
+    
+    return r;
 }
 
 void scheduler_job_finished(job *job_done, double time) {
-    // TODO: Implement me!
+    free((job_info*)job_done->metadata);
+    (job_done->metadata) = NULL;
+    priqueue_poll(&pqueue);
 }
 
 static void print_stats() {
@@ -125,6 +187,9 @@ double scheduler_average_response_time() {
 
 void scheduler_show_queue() {
     // OPTIONAL: Implement this if you need it!
+    // for (size_t i = 0; i < priqueue_size(&pqueue); i++) {
+        
+    // }
 }
 
 void scheduler_clean_up() {
