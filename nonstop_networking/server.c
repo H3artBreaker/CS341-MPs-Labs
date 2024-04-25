@@ -62,8 +62,13 @@ char* server_parser(int argc, char **argv) {
     return argv[1];
 }
 
-void response_generator(char* response, int client_fd, size_t fileSize) {
-    write(client_fd, response, strlen(response));
+void response_generator(char* response, int client_fd) {
+    printf("Start writing response\n");
+    size_t wsize = write_all_to_socket(client_fd, response, strlen(response));
+    if (wsize != strlen(response)) {
+        perror("generating response error");
+    }
+    printf("finished generating response\n");
 }
 
 void shutdown_server() { //unfinished
@@ -73,11 +78,11 @@ void shutdown_server() { //unfinished
         perror("Failed to remove directory");
     } 
 
-
+    dictionary_destroy(&fd_to_connState);
+    vector_destroy(file_list);
 
     close(epoll_fd);
     close(server_socket);
-    
 
     exit(1);
 }
@@ -191,7 +196,9 @@ int main(int argc, char **argv) {
     struct epoll_event events[MAX_EVENTS];
     
     while (1) {
+        printf("Start epoll_waiting\n");
         int event_count = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+        printf("Finish epoll_waiting\n");
         if (event_count == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             perror("Epoll wait failed");
             shutdown_server();
@@ -218,8 +225,14 @@ int main(int argc, char **argv) {
                 connection_state_t* conn_stat = calloc(1, sizeof(connection_state_t));
                 dictionary_set(fd_to_connState, &client_fd, conn_stat);
             } else {
-                //printf("client fd is %d\n", events[i].data.fd);
+                printf("(fd: )client fd is %d\n", events[i].data.fd);
                 client_process(events[i]);
+
+                int client_fd = events[i].data.fd;
+                shutdown(client_fd, SHUT_RDWR);
+                close(client_fd);
+                dictionary_remove(fd_to_connState, &client_fd);  
+                epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL); //!!!!!!
             }
         }
 
@@ -240,62 +253,132 @@ void client_process(struct epoll_event client_event) {
 
     //see if the header is parsed, if no parse it
     if (client_info->state == 0) { //first time parse it
-        if (header_parser(client_fd, client_info) != 1) {
+        int hp_result = header_parser(client_fd, client_info);
+        if (hp_result != 1) {
+            client_info->state = -100;
             perror("PROBLEM IN PARSE HEAD");
-        }
-        client_info->state = 1;
+        } 
     }
 
     if (client_info->method == GET) {
+        char* retrieve_file = client_info->filename;
+        struct stat st;
+        size_t fileSize = 0;  //indicates how many bytes are present in the binary data in the request.
 
+        char path[BUFFER_SIZE];
+        memset(path, 0, sizeof(path));
+        snprintf(path, sizeof(path), "%s/%s", dir_name, retrieve_file);
+        if (stat(path, &st) == 0) {
+            response_generator("OK\n", client_fd);
+            fileSize = st.st_size;
+        } else {
+            perror("FILE NOT EXIST ON SERVER");
+            client_info->state = -100;
+        }
+        
+        if (client_info->state == 0) {
+            char size_and_file[fileSize]; //VERB [filename]\n([File size])
+            memcpy(size_and_file, &fileSize, sizeof(fileSize));
+            write(client_fd, size_and_file, sizeof(size_t));
+
+            //get the binary data of the localFile and write it to the socket.
+            FILE* file = fopen(path, "rb");  // Open the retrieve file in binary mode
+            if (file == 0) {
+                perror("FAILED TO OPEN FILE ON SERVER");
+                client_info->state = -100;
+            }
+
+            char read_buffer[BUFFER_SIZE];
+            while (!feof(file)) {   
+                size_t byte_read = fread(read_buffer, 1, BUFFER_SIZE, file); //read every blocks（buffer)
+                if (byte_read > 0) { //read successfully
+                    size_t byte_written = write_all_to_socket(client_fd, read_buffer, byte_read);
+                    if (byte_written == (size_t)-1) {
+                        perror("FAILED TO WRITE TO SERVER SOCKET in PUT");
+                        client_info->state = -100;
+                        break;
+                    } 
+                }
+            }
+            fclose(file);
+        }
+        
     } else if (client_info->method == PUT) {
         if (PUT_file(client_fd, client_info) != 1) {
-            client_info->state = 0;
+            client_info->state = -100;
             perror("PUT FILE ERROR");
         }
     } else if (client_info->method == DELETE) {
         char* delete_file = client_info->filename;
+        
         char path[BUFFER_SIZE];
         snprintf(path, sizeof(path), "%s/%s", dir_name, delete_file);
+
 		if (remove(path) < 0) {
-			client_info->state = 0;
+			client_info->state = -100;
 		}
-        //printf("DELETE FILE IS %s\n", delete_file);
-        int removed = 0;
-        for (size_t i = 0; i < vector_size(file_list); i++) {
-            if (strncmp(vector_get(file_list, i), delete_file, strlen(delete_file)) == 0) {
-                vector_erase(file_list, i);
-                removed = 1;
-                client_info->state = 1;
-                break;
+
+        if (client_info->state == 0) {
+            int removed = 0;
+            for (size_t i = 0; i < vector_size(file_list); i++) {
+                if (strncmp((char*)vector_get(file_list, i), delete_file, strlen(delete_file)) == 0) {
+                    vector_erase(file_list, i);
+                    removed = 1;
+                    printf("REMOVED THE file\n");
+                    break;
+                }
+            }
+            if (removed == 0) {
+                client_info->state = -100;
             }
         }
-        if (removed == 0) {
-            client_info->state = 0;
-        }
-        // printf("state after loop is %u \n", client_info->state);
+        
     } else if (client_info->method == LIST) {
-
-    } 
-    // printf("filename is %s \n", client_info->filename);
-    // printf("method is %u \n", client_info->method);
-    // printf("state is %u \n", client_info->state);
-    if (client_info->state == 1) {
-        if (client_info->method == PUT || client_info->method == DELETE) {
-            //printf("GENERATOR\n");
-            response_generator("OK\n", client_fd, 0);
+        response_generator("OK\n", client_fd);
+        size_t lsize = 0;
+        for (size_t i = 0; i < vector_size(file_list); i++) {
+            char* filename = (char*)vector_get(file_list, i);
+            lsize += strlen(filename);
+            if (i != vector_size(file_list) - 1) {
+                lsize++;
+            }
         }
-    } else {
-        //printf("TEST\n");
-        if (client_info->method == PUT || client_info->method == DELETE) {
-            response_generator("ERROR\nPUT OR DELETE FAILED\n", client_fd, 0);
+        char sizeBuffer[sizeof(size_t)];
+        memcpy(sizeBuffer, &lsize, sizeof(sizeBuffer));
+        write_all_to_socket(client_fd, sizeBuffer, sizeof(sizeBuffer));
+
+        for (size_t i = 0; i < vector_size(file_list); i++) {
+            char* filename = (char*)vector_get(file_list, i);
+        
+            size_t filename_length = strlen(filename);
+            size_t buffer_size = (i != vector_size(file_list) - 1) ? filename_length + 1 : filename_length;  // Adjust size based on newline
+            
+            char buffer[buffer_size];
+            memcpy(buffer, filename, filename_length);  // Copy without null-termination
+
+            // Add newline if not the last item
+            if (i != vector_size(file_list) - 1) {
+                buffer[filename_length] = '\n';  // Append newline at the end
+            }
+
+            // Write to the socket the exact length
+            write_all_to_socket(client_fd, buffer, buffer_size);
+
+            //does here cause any problem as the end of the file name is \0 for the last one
+        }
+        
+    } 
+
+    //printf("state is %u \n", client_info->state);
+    if (client_info->method == PUT || client_info->method == DELETE) {
+        if (client_info->state != -100) {
+            response_generator("OK\n", client_fd);
+        } else {
+            response_generator("ERROR\nPUT OR DELETE FAILED\n", client_fd);
         }
     }
-    //printf("END??\n");
-    free(client_info);
-    dictionary_remove(fd_to_connState, &client_fd);
-    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL); //!!!!!!
-    //printf("FINISHED\n");
+
+    free(client_info); 
     
 }
 
@@ -310,6 +393,7 @@ void client_process(struct epoll_event client_event) {
 
 int PUT_file(int client_fd, connection_state_t* client_info) {
     char* filename = client_info->filename;
+    // printf("Client put file name is %s\n", filename);
     char wholePath[BUFFER_SIZE];
     snprintf(wholePath, sizeof(wholePath), "%s/%s", dir_name, filename);
 
@@ -375,11 +459,12 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
 
 int header_parser(int client_fd, connection_state_t* client_info) {
     char header[HEADER_BUFFER_SIZE]; //HEADER_BUFFER_SIZE == 1024
+    memset(header, 0, sizeof(header));
     size_t header_len = get_header(client_fd, header);
     if (header_len <= 0) {
         return (int)header_len;
     }
-    //printf("the header is %s \n", header);
+    printf("the header is %s \n", header);
     //check verb
     if (strncmp(header, "GET ", 4) == 0) { //add the whitespace in to compare
         client_info->method = GET;
