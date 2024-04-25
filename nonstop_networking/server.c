@@ -78,7 +78,7 @@ void shutdown_server() { //unfinished
         perror("Failed to remove directory");
     } 
 
-    dictionary_destroy(&fd_to_connState);
+    dictionary_destroy(fd_to_connState);
     vector_destroy(file_list);
 
     close(epoll_fd);
