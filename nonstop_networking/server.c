@@ -100,6 +100,11 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        perror("Error setting up signal handler for SIGPIPE");
+        shutdown_server();
+    }
+
     char* port = server_parser(argc, argv);
 
 
@@ -154,14 +159,13 @@ int main(int argc, char **argv) {
     freeaddrinfo(result);
     result = NULL;
 
-    if (listen(server_socket, 100)) {
+    if (listen(server_socket, 50)) {
         perror("Listen error");
         close(server_socket);
         exit(1);
     }
 
     fd_to_connState = int_to_shallow_dictionary_create();
-    //file_list = shallow_vector_create();
     file_list = string_vector_create();
     
     //create the temp directory
@@ -277,9 +281,9 @@ void client_process(struct epoll_event client_event) {
         }
         
         if (client_info->state == 0) {
-            char size_and_file[fileSize]; //VERB [filename]\n([File size])
-            memcpy(size_and_file, &fileSize, sizeof(fileSize));
-            write(client_fd, size_and_file, sizeof(size_t));
+            char sizeBuffer[sizeof(size_t)]; //VERB [filename]\n([File size])
+            memcpy(sizeBuffer, &fileSize, sizeof(fileSize));
+            write(client_fd, sizeBuffer, sizeof(size_t));
 
             //get the binary data of the localFile and write it to the socket.
             FILE* file = fopen(path, "rb");  // Open the retrieve file in binary mode
@@ -308,6 +312,7 @@ void client_process(struct epoll_event client_event) {
             client_info->state = -100;
             perror("PUT FILE ERROR");
         }
+
     } else if (client_info->method == DELETE) {
         char* delete_file = client_info->filename;
         
@@ -366,8 +371,10 @@ void client_process(struct epoll_event client_event) {
 
             //does here cause any problem as the end of the file name is \0 for the last one
         }
-        
-    } 
+    } else {
+        print_invalid_response();
+        client_info->state = -100;
+    }
 
     //printf("state is %u \n", client_info->state);
     if (client_info->method == PUT || client_info->method == DELETE) {
@@ -409,7 +416,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     size_t bytes_read = read_all_from_socket(client_fd, size_buf, sizeof(size_t));
     if (bytes_read != sizeof(size_t)) {
         perror("Error reading file size");
-        close(fd);
+        
         return -1;
     }
     memcpy(&file_size, size_buf, sizeof(size_t));
@@ -420,7 +427,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     while (total_read < file_size) {
         size_t byte_read = read_all_from_socket(client_fd, buffer, BUFFER_SIZE);
         if (byte_read == 0 && total_read < file_size) {
-            perror("RECEIVED TOO FEW DATA");
+            print_too_little_data();
             close(fd);
             return -100; // Not enough data
         }
@@ -440,7 +447,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     }
 
     if (total_read > file_size || read_all_from_socket(client_fd, buffer, BUFFER_SIZE) > 0) {
-        perror("RECEIVED TOO MUCH DATA");
+        print_received_too_much_data();
         close(fd);
         return -500; // Excessive data
     }
@@ -483,6 +490,7 @@ int header_parser(int client_fd, connection_state_t* client_info) {
         client_info->method = LIST;
     } else {
         print_invalid_response();
+        return -1;
     }
     return 1;
 }
