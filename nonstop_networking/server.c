@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
         exit (1);
     }
 
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    server_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
     int enable = 1;
 
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
     
     // Register server socket with epoll (edge-triggered)
     struct epoll_event event;
-    event.events = EPOLLIN | EPOLLET;  // Edge-triggered read events
+    event.events = EPOLLIN;  // Do not set Edge-triggered 
     event.data.fd = server_socket;
     
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_socket, &event) == -1) { //By registering this listening socket with epoll_ctl, you indicate that you want to be notified when there's activity on this socket (like new incoming connections).
@@ -209,15 +209,28 @@ int main(int argc, char **argv) {
         }
 
         for (int i = 0; i < event_count; i++) {
-            if (events[i].data.fd == server_socket) { // 
+            if (events[i].data.fd == server_socket) { 
                 int client_fd = accept(server_socket, NULL, NULL);
                 if (client_fd == -1) {
                     perror("Accept failed");
                     shutdown_server();
                 }
 
+                // //fcntl
+                // int flags = fcntl(client_fd, F_GETFL, 0);  // Get current flags
+                // if (flags == -1) {
+                //     perror("Error getting file descriptor flags");
+                //     shutdown_server();
+                // }
+
+                // // Set non-blocking mode
+                // if (fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+                //     perror("Error setting non-blocking mode");
+                //     shutdown_server();
+                // }
+
                 // Register client with epoll (edge-triggered)
-                event.events = EPOLLIN | EPOLLET;
+                event.events = EPOLLIN;
                 event.data.fd = client_fd;
 
                 if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event) == -1) {
@@ -277,6 +290,7 @@ void client_process(struct epoll_event client_event) {
             fileSize = st.st_size;
         } else {
             perror("FILE NOT EXIST ON SERVER");
+            response_generator("ERROR\nNOT EXIST", client_fd);
             client_info->state = -100;
         }
         
@@ -319,7 +333,8 @@ void client_process(struct epoll_event client_event) {
         char path[BUFFER_SIZE];
         snprintf(path, sizeof(path), "%s/%s", dir_name, delete_file);
 
-		if (remove(path) < 0) {
+		if (remove(path) != 0) {
+            perror("file not exist so can not be removed or remove has error");
 			client_info->state = -100;
 		}
 
@@ -416,7 +431,8 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     size_t bytes_read = read_all_from_socket(client_fd, size_buf, sizeof(size_t));
     if (bytes_read != sizeof(size_t)) {
         perror("Error reading file size");
-        
+        close(fd);
+        remove(wholePath);
         return -1;
     }
     memcpy(&file_size, size_buf, sizeof(size_t));
@@ -429,10 +445,12 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
         if (byte_read == 0 && total_read < file_size) {
             print_too_little_data();
             close(fd);
+            remove(wholePath);
             return -100; // Not enough data
         }
         if (byte_read == (size_t)-1) {
             close(fd);
+            remove(wholePath);
             return -1;
         }
         if (byte_read > 0) { // Successful read
@@ -440,6 +458,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
             if (byte_written != byte_read) {
                 perror("Failed to write data to file");
                 close(fd);
+                remove(wholePath);
                 return -1;
             }
         }
@@ -449,6 +468,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     if (total_read > file_size || read_all_from_socket(client_fd, buffer, BUFFER_SIZE) > 0) {
         print_received_too_much_data();
         close(fd);
+        remove(wholePath);
         return -500; // Excessive data
     }
 
@@ -556,3 +576,5 @@ void remove_directory_contents(const char *path) {
 
     closedir(dir);
 }
+
+
