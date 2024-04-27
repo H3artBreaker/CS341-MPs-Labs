@@ -62,7 +62,7 @@ char* server_parser(int argc, char **argv) {
     return argv[1];
 }
 
-void response_generator(char* response, int client_fd) {
+void response_generator(const char* response, int client_fd) {
     printf("Start writing response\n");
     size_t wsize = write_all_to_socket(client_fd, response, strlen(response));
     if (wsize != strlen(response)) {
@@ -246,6 +246,7 @@ int main(int argc, char **argv) {
                 client_process(events[i]);
 
                 int client_fd = events[i].data.fd;
+                free(dictionary_get(fd_to_connState, &client_fd));
                 shutdown(client_fd, SHUT_RDWR);
                 close(client_fd);
                 dictionary_remove(fd_to_connState, &client_fd);  
@@ -267,13 +268,16 @@ void client_process(struct epoll_event client_event) {
         return;
     }
     connection_state_t* client_info = dictionary_get(fd_to_connState, &client_fd);
-
+    
     //see if the header is parsed, if no parse it
     if (client_info->state == 0) { //first time parse it
         int hp_result = header_parser(client_fd, client_info);
         if (hp_result != 1) {
-            client_info->state = -100;
+            // client_info->state = -100;
             perror("PROBLEM IN PARSE HEAD");
+            response_generator("ERROR\n", client_fd);
+            response_generator(err_bad_request, client_fd);
+            return;
         } 
     }
 
@@ -286,25 +290,31 @@ void client_process(struct epoll_event client_event) {
         memset(path, 0, sizeof(path));
         snprintf(path, sizeof(path), "%s/%s", dir_name, retrieve_file);
         if (stat(path, &st) == 0) {
-            response_generator("OK\n", client_fd);
             fileSize = st.st_size;
         } else {
             perror("FILE NOT EXIST ON SERVER");
-            response_generator("ERROR\nNOT EXIST", client_fd);
-            client_info->state = -100;
+            response_generator("ERROR\n", client_fd);
+            response_generator(err_no_such_file, client_fd);
+            //client_info->state = -100;
+            return;
         }
         
         if (client_info->state == 0) {
-            char sizeBuffer[sizeof(size_t)]; //VERB [filename]\n([File size])
-            memcpy(sizeBuffer, &fileSize, sizeof(fileSize));
-            write(client_fd, sizeBuffer, sizeof(size_t));
-
             //get the binary data of the localFile and write it to the socket.
             FILE* file = fopen(path, "rb");  // Open the retrieve file in binary mode
             if (file == 0) {
                 perror("FAILED TO OPEN FILE ON SERVER");
-                client_info->state = -100;
+                fclose(file);
+                response_generator("ERROR\n", client_fd);
+                response_generator(err_no_such_file, client_fd);
+                return;
             }
+
+            response_generator("OK\n", client_fd);
+            
+            char sizeBuffer[sizeof(size_t)]; //VERB [filename]\n([File size])
+            memcpy(sizeBuffer, &fileSize, sizeof(fileSize));
+            write(client_fd, sizeBuffer, sizeof(size_t));
 
             char read_buffer[BUFFER_SIZE];
             while (!feof(file)) {   
@@ -313,20 +323,35 @@ void client_process(struct epoll_event client_event) {
                     size_t byte_written = write_all_to_socket(client_fd, read_buffer, byte_read);
                     if (byte_written == (size_t)-1) {
                         perror("FAILED TO WRITE TO SERVER SOCKET in PUT");
-                        client_info->state = -100;
-                        break;
+                        response_generator("ERROR\n", client_fd);
+                        fclose(file);
+                        return;
                     } 
                 }
             }
             fclose(file);
         }
-        
+        client_info->state = 1;
     } else if (client_info->method == PUT) {
-        if (PUT_file(client_fd, client_info) != 1) {
-            client_info->state = -100;
-            perror("PUT FILE ERROR");
+        int pf_result = PUT_file(client_fd, client_info);
+        if (pf_result == -100 || pf_result == -500) { //too little or too much
+            response_generator("ERROR\n", client_fd);
+            response_generator(err_bad_file_size, client_fd);
+            return;
         }
-
+        if (pf_result == -200) {
+            perror("BAD REQUEST");
+            response_generator("ERROR\n", client_fd);
+            response_generator(err_bad_request, client_fd);
+            return;
+        }
+        if (pf_result == -1) {
+            perror("CAN't CREAT FILE ");
+            response_generator("ERROR\n", client_fd);
+            response_generator(err_no_such_file, client_fd);
+            return;
+        }
+        client_info->state = 1;
     } else if (client_info->method == DELETE) {
         char* delete_file = client_info->filename;
         
@@ -335,7 +360,9 @@ void client_process(struct epoll_event client_event) {
 
 		if (remove(path) != 0) {
             perror("file not exist so can not be removed or remove has error");
-			client_info->state = -100;
+			response_generator("ERROR\n", client_fd);
+            response_generator(err_no_such_file, client_fd);
+            return;
 		}
 
         if (client_info->state == 0) {
@@ -349,10 +376,12 @@ void client_process(struct epoll_event client_event) {
                 }
             }
             if (removed == 0) {
-                client_info->state = -100;
+                response_generator("ERROR\n", client_fd);
+                response_generator(err_no_such_file, client_fd);
+                return;
             }
         }
-        
+        client_info->state = 1;
     } else if (client_info->method == LIST) {
         response_generator("OK\n", client_fd);
         size_t lsize = 0;
@@ -384,29 +413,26 @@ void client_process(struct epoll_event client_event) {
             // Write to the socket the exact length
             write_all_to_socket(client_fd, buffer, buffer_size);
 
-            //does here cause any problem as the end of the file name is \0 for the last one
         }
+        client_info->state = 1;
     } else {
-        print_invalid_response();
-        client_info->state = -100;
+        response_generator("ERROR\n", client_fd);
+        response_generator(err_bad_request, client_fd);
+        return;
     }
 
     //printf("state is %u \n", client_info->state);
     if (client_info->method == PUT || client_info->method == DELETE) {
-        if (client_info->state != -100) {
+        if (client_info->state == 1) {
             response_generator("OK\n", client_fd);
-        } else {
-            response_generator("ERROR\nPUT OR DELETE FAILED\n", client_fd);
         }
     }
-
-    free(client_info); 
-    
 }
 
 /*
--1 has error
+-1 NO FILE EXIST
 -100 too little
+-200 bad request
 -500 too much
 1 success for all
 
@@ -415,13 +441,13 @@ void client_process(struct epoll_event client_event) {
 
 int PUT_file(int client_fd, connection_state_t* client_info) {
     char* filename = client_info->filename;
-    // printf("Client put file name is %s\n", filename);
     char wholePath[BUFFER_SIZE];
     snprintf(wholePath, sizeof(wholePath), "%s/%s", dir_name, filename);
 
     int fd = open(wholePath, O_WRONLY | O_CREAT | O_TRUNC, 00777);
     if (fd == -1) {
         perror("Failed to open file");
+        remove(wholePath);
         return -1;
     }
 
@@ -433,7 +459,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
         perror("Error reading file size");
         close(fd);
         remove(wholePath);
-        return -1;
+        return -200;
     }
     memcpy(&file_size, size_buf, sizeof(size_t));
     
@@ -443,7 +469,6 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     while (total_read < file_size) {
         size_t byte_read = read_all_from_socket(client_fd, buffer, BUFFER_SIZE);
         if (byte_read == 0 && total_read < file_size) {
-            print_too_little_data();
             close(fd);
             remove(wholePath);
             return -100; // Not enough data
@@ -451,7 +476,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
         if (byte_read == (size_t)-1) {
             close(fd);
             remove(wholePath);
-            return -1;
+            return -200;
         }
         if (byte_read > 0) { // Successful read
             size_t byte_written = write(fd, buffer, byte_read);
@@ -459,14 +484,13 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
                 perror("Failed to write data to file");
                 close(fd);
                 remove(wholePath);
-                return -1;
+                return -200;
             }
         }
         total_read += byte_read;
     }
 
     if (total_read > file_size || read_all_from_socket(client_fd, buffer, BUFFER_SIZE) > 0) {
-        print_received_too_much_data();
         close(fd);
         remove(wholePath);
         return -500; // Excessive data
@@ -481,7 +505,11 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     return 1; // Success
 }
 
+/*
+1 - successs
+< 0 - malformed (header problem or no method)
 
+*/
 
 
 int header_parser(int client_fd, connection_state_t* client_info) {
@@ -509,7 +537,7 @@ int header_parser(int client_fd, connection_state_t* client_info) {
     } else if (strncmp(header, "LIST\n", 5) == 0) {
         client_info->method = LIST;
     } else {
-        print_invalid_response();
+        perror("malformed!!");
         return -1;
     }
     return 1;

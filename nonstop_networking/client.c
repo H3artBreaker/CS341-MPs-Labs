@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
         struct stat st;
         size_t fileSize = 0;  //indicates how many bytes are present in the binary data in the request.
         if (stat(localFile, &st) == 0) {
-            fileSize = st.st_size;
+            fileSize = st.st_size; 
         } else {
             perror("STAT ERROR IN PUT");
             free(parse_result);
