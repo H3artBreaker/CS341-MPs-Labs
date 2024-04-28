@@ -295,7 +295,6 @@ void client_process(struct epoll_event client_event) {
             perror("FILE NOT EXIST ON SERVER");
             response_generator("ERROR\n", client_fd);
             response_generator(err_no_such_file, client_fd);
-            //client_info->state = -100;
             return;
         }
         
@@ -327,8 +326,9 @@ void client_process(struct epoll_event client_event) {
                         fclose(file);
                         return;
                     } 
-                }
+                } 
             }
+
             fclose(file);
         }
         client_info->state = 1;
