@@ -313,7 +313,12 @@ void client_process(struct epoll_event client_event) {
             
             char sizeBuffer[sizeof(size_t)]; //VERB [filename]\n([File size])
             memcpy(sizeBuffer, &fileSize, sizeof(fileSize));
-            write(client_fd, sizeBuffer, sizeof(size_t));
+            if (write_all_to_socket(client_fd, sizeBuffer, sizeof(size_t)) == -1) {
+                perror("write error for size");
+                fclose(file);
+                return;
+            }
+            
 
             char read_buffer[BUFFER_SIZE];
             while (!feof(file)) {   
@@ -349,6 +354,10 @@ void client_process(struct epoll_event client_event) {
             perror("CAN't CREAT FILE ");
             response_generator("ERROR\n", client_fd);
             response_generator(err_no_such_file, client_fd);
+            return;
+        }
+        if (pf_result == -1000) {
+            perror("PUT HAS SIGPIPE PROBABLY");
             return;
         }
         client_info->state = 1;
@@ -455,6 +464,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     size_t file_size = 0;
     char size_buf[BUFFER_SIZE];
     size_t bytes_read = read_all_from_socket(client_fd, size_buf, sizeof(size_t));
+    //read_all_from_socket(client_fd, size_buf, sizeof(size_t));
     if (bytes_read != sizeof(size_t)) {
         perror("Error reading file size");
         close(fd);
@@ -479,7 +489,13 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
             return -200;
         }
         if (byte_read > 0) { // Successful read
-            size_t byte_written = write(fd, buffer, byte_read);
+            size_t byte_written = write_all_to_socket(fd, buffer, byte_read);
+            if (byte_written == -1) {
+                perror("PROBABLY SIGPIPE");
+                close(fd);
+                remove(wholePath);
+                return -1000;
+            }
             if (byte_written != byte_read) {
                 perror("Failed to write data to file");
                 close(fd);
