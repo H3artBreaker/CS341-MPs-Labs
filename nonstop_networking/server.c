@@ -490,7 +490,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
         }
         if (byte_read > 0) { // Successful read
             size_t byte_written = write_all_to_socket(fd, buffer, byte_read);
-            if (byte_written == -1) {
+            if (byte_written == (size_t)-1) {
                 perror("PROBABLY SIGPIPE");
                 close(fd);
                 remove(wholePath);
