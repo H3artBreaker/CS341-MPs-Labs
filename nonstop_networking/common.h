@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#define BUFFER_SIZE 2048
+#define BUFFER_SIZE 8192
 #define HEADER_BUFFER_SIZE 1024
 
 #define LOG(...)                      \

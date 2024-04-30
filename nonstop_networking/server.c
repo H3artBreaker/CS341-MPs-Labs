@@ -200,9 +200,9 @@ int main(int argc, char **argv) {
     struct epoll_event events[MAX_EVENTS];
     
     while (1) {
-        printf("Start epoll_waiting\n");
+        //printf("Start epoll_waiting\n");
         int event_count = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
-        printf("Finish epoll_waiting\n");
+        //printf("Finish epoll_waiting\n");
         if (event_count == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             perror("Epoll wait failed");
             shutdown_server();
@@ -242,7 +242,7 @@ int main(int argc, char **argv) {
                 connection_state_t* conn_stat = calloc(1, sizeof(connection_state_t));
                 dictionary_set(fd_to_connState, &client_fd, conn_stat);
             } else {
-                printf("(fd: )client fd is %d\n", events[i].data.fd);
+                //printf("(fd: )client fd is %d\n", events[i].data.fd);
                 client_process(events[i]);
 
                 int client_fd = events[i].data.fd;
@@ -380,7 +380,7 @@ void client_process(struct epoll_event client_event) {
                 if (strncmp((char*)vector_get(file_list, i), delete_file, strlen(delete_file)) == 0) {
                     vector_erase(file_list, i);
                     removed = 1;
-                    printf("REMOVED THE file\n");
+                    //printf("REMOVED THE file\n");
                     break;
                 }
             }
@@ -474,6 +474,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
     memcpy(&file_size, size_buf, sizeof(size_t));
     
     // Write the binary data to the file on the server
+    printf("start putting file\n");
     char buffer[BUFFER_SIZE];
     size_t total_read = 0;
     while (total_read < file_size) {
@@ -517,6 +518,7 @@ int PUT_file(int client_fd, connection_state_t* client_info) {
 
     // Add to the file list
     vector_push_back(file_list, filename);
+    printf("finished putting file\n");
 
     return 1; // Success
 }
@@ -545,7 +547,7 @@ int header_parser(int client_fd, connection_state_t* client_info) {
         client_info->method = PUT;
         strcpy(client_info->filename, header + 4);
         client_info->filename[strlen(client_info->filename) - 1] = '\0'; //replace the \n by \0
-        printf("HEADER is %s \n", client_info->filename);
+        printf("filename is %s \n", client_info->filename);
     } else if (strncmp(header, "DELETE ", 7) == 0) { //add the whitespace in to compare
         client_info->method = DELETE;
         strcpy(client_info->filename, header + 7);
@@ -585,6 +587,8 @@ size_t get_header(int client_fd, char* header) { //VERB + (filename)
 
     return total_capacity;
 }
+
+
 
 void remove_directory_contents(const char *path) {
     DIR *dir = opendir(path);
