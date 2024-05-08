@@ -9,13 +9,11 @@
 
 #define BUF_SIZE 999
 
-void redact_digits(const char *input) {
-    while (*input) {
-        if (*input >= '0' && *input <= '9')
-            putchar('*');
-        else
-            putchar(*input);
-        input++;
+void redact_digits(char *str) {
+    for(size_t i = 0; i < strlen(str); i++) {
+        if(str[i] >= '0' && str[i] <= '9') {
+            str[i] = '*';
+        }
     }
 }
 
@@ -45,7 +43,8 @@ int main(int argc, char** argv) {
     }
 
     //send all the data from file to the first command pipe
-    char buf[BUF_SIZE];
+    char buf[BUF_SIZE + 1];
+    memset(buf, 0, BUF_SIZE + 1);
     size_t byte_read = 0;
     if (use_alternative) {
         // Code to execute if filename matches "/dev/urandom" or "/etc/services"
@@ -76,6 +75,7 @@ int main(int argc, char** argv) {
         close(fd1[0]);
         close(fd2[0]);
         dup2(fd2[1], STDOUT_FILENO);
+        close(fd2[1]);
 
         execlp(argv[2], argv[2], (char *)NULL);
         perror("execlp command1");
@@ -89,30 +89,38 @@ int main(int argc, char** argv) {
     }
 
 
-    char output_buf[BUF_SIZE];
-    char copy_buf[BUF_SIZE];  
-    ssize_t count = read(fd2[0], output_buf, BUF_SIZE);
-    if (count == -1) {
+    char output_buf[BUF_SIZE + 1];
+    char copy_buf[BUF_SIZE + 1];  
+    memset(output_buf, 0, BUF_SIZE + 1);
+    memset(copy_buf, 0, BUF_SIZE + 1);
+    size_t count = read(fd2[0], output_buf, BUF_SIZE);
+    output_buf[BUF_SIZE] = '\0';
+    //printf("count is %lu\n", count);
+    close(fd2[0]);
+    if (count == (size_t)-1) {
         perror("read from command1");
         exit(2);
     }
-    close(fd2[0]);
     memcpy(copy_buf, output_buf, count);  // Copy the data
+    output_buf[count] = '\0';
 
     char path[1024];
+    memset(path, 0, 1024);
     snprintf(path, sizeof(path), "%s/mypassword", getenv("HOME"));
 
-    int out_fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    int out_fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0666);
     if (out_fd == -1) {
         perror("open mypassword");
         exit(2);
     }
-    write(out_fd, output_buf, count);
-    close(out_fd);
+    size_t pass_write = write(out_fd, output_buf, count);
+    if (pass_write != count) {
+        perror("PASSWORD FILE WRITE ERROR");
+        exit(2);
+    }
 
     write(fd3[1], copy_buf, count);
     close(fd3[1]);
-
 
     int pid2 = fork();
     if (pid2 < 0) {
@@ -127,20 +135,23 @@ int main(int argc, char** argv) {
     } else {
         int status;
         waitpid(pid2, &status, 0);
+        close(fd3[0]);
+        close(fd4[1]);
     }
 
     char final_buf[BUF_SIZE + 1];
-    ssize_t final_count = read(fd4[0], final_buf, BUF_SIZE);
-    printf("THE FINAL COUNT IS %lu\n", final_count);
+    size_t final_count = 0;
+    while((final_count = read(fd4[0], final_buf, sizeof(final_buf))) > 0) {
+        redact_digits(final_buf);
+        fwrite(final_buf,1 ,final_count, stdout);
+    }
     close(fd4[0]);
-    if (final_count == -1) {
+    if (final_count == (size_t) -1) {
         perror("read from command2");
         exit(2);
     }
     output_buf[final_count] = '\0';
-    // printf("Buffer has %s \n", final_buf);
-    // printf("before redact\n");
-    redact_digits(final_buf);
+    
     
     return 0;
 }
